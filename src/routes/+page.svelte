@@ -34,8 +34,15 @@
 
     function requestCoords() {
         isRequestingCoords = true;
-        alert('Click on the map to select coordinates');
-        iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
+        // alert('Click on the map to select coordinates');
+        // Make sure the iframe is loaded and has contentWindow
+        if (iframe && iframe.contentWindow) {
+            // Request coordinates from the iframe
+            iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
+        } else {
+            alert('Map not loaded yet. Please wait and try again.');
+            isRequestingCoords = false;
+        }
     }
 
     function convertToValheimCoords(x, y) {
@@ -94,14 +101,18 @@
     }
 
     function handleMessage(event) {
+        console.log('Received message:', event.data);
+        
         if (event.data.type === 'canvasCoords' && isRequestingCoords) {
+            console.log('Received canvas coords:', event.data);
             const valheimCoords = convertToValheimCoords(event.data.x, event.data.y);
+            
             if (valheimCoords) {
                 pinX = valheimCoords.x.toFixed(2);
                 pinZ = valheimCoords.z.toFixed(2);
-                alert('Coordinates selected');
+                alert(`Coordinates selected: X=${pinX}, Z=${pinZ}`);
             } else {
-                alert('Invalid coordinates');
+                alert('Invalid coordinates received');
             }
             isRequestingCoords = false;
         }

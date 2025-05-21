@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+<head>
+    <title>Valheim Map Pins</title>
+    <style>
+        iframe {
+            width: 100%;
+            height: 80vh;
+            border: 1px solid #ccc;
+        }
+        #controls {
+            padding: 10px;
+            background: #f5f5f5;
+            margin-bottom: 10px;
+        }
+        #controls input, #controls select, #controls button {
+            margin: 0 5px 5px 0;
+            padding: 5px;
+        }
+        #status {
+            color: #d32f2f;
+            margin: 10px 0;
+            min-height: 20px;
+        }
+        .coord-input {
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div>
+            <input type="text" id="pin-name" placeholder="Pin Name" />
+            <select id="pin-type">
+                <option value="dot">Dot</option>
+                <option value="house">House</option>
+                <option value="fire">Fire</option>
+                <option value="mine">Mine</option>
+                <option value="cave">Cave</option>
+            </select>
+        </div>
+        <div>
+            <input type="number" id="pin-x" class="coord-input" placeholder="X" step="0.01" />
+            <input type="number" id="pin-z" class="coord-input" placeholder="Z" step="0.01" />
+            <button onclick="requestCoords()">Select on Map</button>
+            <button onclick="addPin()">Add Pin</button>
+        </div>
+        <div id="status">Loading map...</div>
+    </div>
+    <iframe 
+        id="map-iframe" 
+        src="http://forestofgrins.noob.club:20659" 
+        allow="geolocation"
+        referrerpolicy="no-referrer"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+    ></iframe>
+    <script>
+        const IFRAME_ORIGIN = 'http://forestofgrins.noob.club:20659';
+        let isRequestingCoords = false;
+        let iframe = null;
+
+        // Listen for messages from the iframe
+        window.addEventListener('message', (event) => {
+            console.log('Message received from iframe:', event.data);
+            
+            // For security, verify the message is from our iframe
+            if (event.origin !== IFRAME_ORIGIN) {
+                return;
+            }
+
+            // Handle coordinate selection
+            if (event.data.type === 'canvasClick' && isRequestingCoords) {
+                const coords = event.data.coords;
+                if (coords) {
+                    const valheimCoords = convertToValheimCoords(coords.x, coords.y);
+                    if (valheimCoords) {
+                        document.getElementById('pin-x').value = valheimCoords.x.toFixed(2);
+                        document.getElementById('pin-z').value = valheimCoords.z.toFixed(2);
+                        document.getElementById('status').textContent = 'Coordinates selected. Click "Add Pin" to save.';
+                    } else {
+                        document.getElementById('status').textContent = 'Error: Could not convert coordinates.';
+                    }
+                } else {
+                    document.getElementById('status').textContent = 'Error: Could not get coordinates.';
+                }
+                isRequestingCoords = false;
+            }
+        });
+
+        // Initialize when the page loads
+        window.onload = () => {
+            iframe = document.getElementById('map-iframe');
+            document.getElementById('status').textContent = 'Map loaded. Click "Select on Map" to choose coordinates.';
+            
+            // Set up a timer to inject our click handler after the iframe loads
+            const checkIframe = setInterval(() => {
+                try {
+                    if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                        clearInterval(checkIframe);
+                        injectClickHandler();
+                    }
+                } catch (e) {
+                    // Ignore CORS errors for now
+                }
+            }, 500);
+        };
+
+        function injectClickHandler() {
+            try {
+                const scriptContent = `
+                    // Listen for click events on the document
+                    document.addEventListener('click', (event) => {
+                        // Find the canvas element
+                        const canvas = document.querySelector('canvas');
+                        if (!canvas) return;
+                        
+                        // Calculate coordinates relative to canvas
+                        const rect = canvas.getBoundingClientRect();
+                        const x = event.clientX - rect.left;
+                        const y = event.clientY - rect.top;
+                        
+                        // Send coordinates to parent
+                        window.parent.postMessage({
+                            type: 'canvasClick',
+                            coords: { x, y }
+                        }, '*');
+                    });
+                `;
+                
+                // Create a script element in the iframe
+                const script = document.createElement('script');
+                script.textContent = scriptContent;
+                iframe.contentDocument.body.appendChild(script);
+                
+                document.getElementById('status').textContent = 'Ready. Click "Select on Map" to choose coordinates.';
+            } catch (e) {
+                console.error('Error injecting script:', e);
+                document.getElementById('status').textContent = 'Error setting up map interaction. Check console for details.';
+            }
+        }
+
+        function requestCoords() {
+            isRequestingCoords = true;
+            document.getElementById('status').textContent = 'Click on the map to select coordinates...';
+            
+            // Focus the iframe to ensure clicks are captured
+            if (iframe) {
+                iframe.focus();
+            }
+            
+            // Set a timeout in case the user doesn't click
+            setTimeout(() => {
+                if (isRequestingCoords) {
+                    isRequestingCoords = false;
+                    document.getElementById('status').textContent = 'Coordinate selection timed out. Try again.';
+                }
+            }, 30000); // 30 second timeout
+        }
+
+        function convertToValheimCoords(x, y) {
+            const canvasWidth = 2048;
+            const canvasHeight = 2048;
+            const pixelSize = 12;
+            const coordOffset = canvasWidth / 2;
+            
+            const imgX = (x / canvasWidth) * canvasWidth;
+            const imgY = (y / canvasHeight) * canvasHeight;
+            const worldX = (imgX - coordOffset) * pixelSize;
+            const worldZ = -((imgY - coordOffset) * pixelSize);
+            
+            return isFinite(worldX) && isFinite(worldZ) ? { x: worldX, z: worldZ } : null;
+        }
+
+        function addPin() {
+            const pin = {
+                uid: '123456', // Replace with dynamic player ID
+                pinId: Date.now().toString(),
+                type: document.getElementById('pin-type').value,
+                name: 'YourPlayerName', // Replace with player name
+                x: parseFloat(document.getElementById('pin-x').value),
+                z: parseFloat(document.getElementById('pin-z').value),
+                text: document.getElementById('pin-name').value || 'Unnamed'
+            };
+
+            if (!pin.x || !pin.z) {
+                document.getElementById('status').textContent = 'Error: Please select coordinates first.';
+                return;
+            }
+
+            // For now, just log the pin data
+            console.log('Would add pin:', pin);
+            document.getElementById('status').textContent = `Pin added at X: ${pin.x}, Z: ${pin.z}`;
+            
+            // Clear the form
+            document.getElementById('pin-name').value = '';
+            document.getElementById('pin-x').value = '';
+            document.getElementById('pin-z').value = '';
+        }
+    </script>
+</body>
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'x-api-key': 'your_secret_key'
+						},
+						body: JSON.stringify(pin)
+					});
+					if (response.ok) {
+						document.getElementById('status').textContent = 'Pin added! Refreshing map...';
+						document.getElementById('map-iframe').contentWindow.location.reload();
+					} else {
+						document.getElementById('status').textContent = 'Error: Failed to add pin.';
+					}
+				} catch (e) {
+					document.getElementById('status').textContent = 'Error adding pin: ' + e.message;
+				}
+			}
+		</script>
+	</body>
+</html>
