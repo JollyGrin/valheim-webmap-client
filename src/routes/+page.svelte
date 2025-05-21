@@ -93,14 +93,6 @@
 		);
 	}
 
-	function addPinToDB(
-		pin: { type: (typeof PIN_TYPES)[number]['value']; label: string } & Coordinate
-	) {
-		$mutation.mutate({
-			...pin
-		});
-	}
-
 	function handleAddPin(): void {
 		if (!currentCoords) {
 			updateStatus('Please select coordinates first', true);
