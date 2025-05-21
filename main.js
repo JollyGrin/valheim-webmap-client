@@ -569,4 +569,19 @@
             return true;
         }
     };
+
+    // Add to main.js (in the iframe)
+    window.addEventListener('message', function(event) {
+        if (event.data.type === 'addPin') {
+            const { x, z, pinType, pinText } = event.data;
+            if (window.valheimMap && window.valheimMap.addPin) {
+                window.valheimMap.addPin(
+                    parseFloat(x),
+                    parseFloat(z),
+                    pinType || 'dot',
+                    pinText || 'Custom Pin'
+                );
+            }
+        }
+    });
 })(); // This is the original closing of the IIFE

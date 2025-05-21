@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Valheim Map Coordinate Picker</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				padding: 20px;
+			}
+			#map-container {
+				width: 100%;
+				height: 80vh;
+				border: 1px solid #ccc;
+			}
+			iframe {
+				width: 100%;
+				height: 100%;
+				border: none;
+			}
+			#coords {
+				margin-top: 10px;
+				padding: 10px;
+				background: #f5f5f5;
+				font-family: monospace;
+				font-size: 16px;
+			}
+			#status {
+				color: #d32f2f;
+				margin: 10px 0;
+				padding: 10px;
+				background: #fff3f3;
+				border-left: 4px solid #d32f2f;
+			}
+			button {
+				padding: 8px 16px;
+				background: #4caf50;
+				color: white;
+				border: none;
+				border-radius: 4px;
+				cursor: pointer;
+				margin: 10px 0;
+			}
+			button:hover {
+				background: #45a049;
+			}
+			button:disabled {
+				background: #cccccc;
+				cursor: not-allowed;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Valheim Map Coordinate Picker</h1>
+		<div id="map-container">
+			<iframe
+				id="map-iframe"
+				src="http://forestofgrins.noob.club:20659"
+				sandbox="allow-same-origin allow-scripts"
+			></iframe>
+		</div>
+		<div>
+			<button id="pickBtn" disabled>Click here first, then click on the map</button>
+		</div>
+		<div id="coords">Coordinates will appear here</div>
+		<div id="status">Loading map...</div>
+
+		<script>
+			const iframe = document.getElementById('map-iframe');
+			const coordsDiv = document.getElementById('coords');
+			const statusEl = document.getElementById('status');
+			const pickBtn = document.getElementById('pickBtn');
+
+			function updateStatus(message, isError = false) {
+				statusEl.textContent = message;
+				statusEl.style.color = isError ? '#d32f2f' : '#2e7d32';
+				statusEl.style.borderLeftColor = isError ? '#d32f2f' : '#2e7d32';
+				statusEl.style.background = isError ? '#fff3f3' : '#f1f8e9';
+				console.log(isError ? 'Error: ' + message : message);
+			}
+
+			// Listen for messages from the iframe
+			window.addEventListener('message', function (event) {
+				console.log('Received message from iframe:', event.data);
+
+				if (event.data.type === 'canvasCoords') {
+					// Use the coordinates directly from the message
+					const worldX = event.data.x.toFixed(2);
+					const worldZ = event.data.y.toFixed(2);
+
+					// Update the display
+					coordsDiv.innerHTML = `
+                <strong>Selected Coordinates:</strong><br>
+                X: ${worldX}<br>
+                Z: ${worldZ}
+            `;
+
+					// Add a pin at these coordinates
+					try {
+						const iframeWindow = document.getElementById('map-iframe').contentWindow;
+						if (iframeWindow.valheimMap && iframeWindow.valheimMap.addPin) {
+							iframeWindow.valheimMap.addPin(
+								parseFloat(worldX),
+								parseFloat(worldZ),
+								'dot', // Default pin type
+								'Custom Pin' // Default pin text
+							);
+							updateStatus('Pin added successfully!');
+						} else {
+							updateStatus('Error: Could not find valheimMap.addPin function', true);
+							console.error('valheimMap.addPin not found in iframe');
+						}
+					} catch (e) {
+						updateStatus('Error adding pin: ' + e.message, true);
+						console.error('Error adding pin:', e);
+					}
+
+					pickBtn.disabled = false;
+					pickBtn.textContent = 'Click to pick coordinates';
+				}
+			});
+
+			// When the pick button is clicked
+			pickBtn.addEventListener('click', function () {
+				try {
+					updateStatus('Click on the map to select coordinates...');
+					pickBtn.disabled = true;
+					pickBtn.textContent = 'Click on the map...';
+
+					// Send the requestCoords message to the iframe
+					iframe.contentWindow.postMessage(
+						{
+							type: 'requestCoords'
+						},
+						'*'
+					);
+
+					console.log('Sent requestCoords message to iframe');
+				} catch (e) {
+					updateStatus('Error: ' + e.message, true);
+					pickBtn.disabled = false;
+					pickBtn.textContent = 'Click to pick coordinates';
+				}
+			});
+
+			// When iframe loads
+			iframe.onload = function () {
+				updateStatus('Map loaded. Click the button to start picking coordinates.');
+				pickBtn.disabled = false;
+			};
+		</script>
+	</body>
+</html>
