@@ -115,7 +115,7 @@
 	});
 </script>
 
-<div class="container">
+<div class="container-all">
 	<nav class="navbar">
 		<h1>Valheim Map</h1>
 
@@ -187,11 +187,11 @@
 		font-family: Arial, sans-serif;
 	}
 
-	.container {
+	.container-all {
 		display: flex;
 		flex-direction: column;
 		height: 100vh;
-		width: 100%;
+		width: 100vw;
 	}
 
 	.navbar {
