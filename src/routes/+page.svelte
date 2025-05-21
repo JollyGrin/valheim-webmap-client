@@ -96,9 +96,12 @@
     // Handle messages from iframe
     function handleMessage(event: MessageEvent): void {
         if (event.data?.type === 'canvasCoords') {
-            const worldX = parseFloat(event.data.x).toFixed(2);
-            const worldZ = parseFloat(event.data.y).toFixed(2);
-            currentCoords = { x: worldX, z: worldZ };
+            const worldX = parseFloat(event.data.x);
+            const worldZ = parseFloat(event.data.y);
+            currentCoords = { 
+                x: worldX.toString(), 
+                z: worldZ.toString() 
+            };
             
             updateStatus('Coordinates received! Click "Add Pin" to place a pin or pick a new location.');
             isRequestingCoords = false;
@@ -121,6 +124,7 @@
     <div id="map-container">
         <iframe
             id="map-iframe"
+            title="Valheim WebMap"
             src="http://forestofgrins.noob.club:20659"
             sandbox="allow-same-origin allow-scripts"
             on:load={handleIframeLoad}
@@ -167,8 +171,8 @@
     <div id="coords">
         {#if currentCoords}
             <strong>Selected Coordinates:</strong><br>
-            X: {currentCoords.x.toFixed(2)}<br>
-            Z: {currentCoords.z.toFixed(2)}
+            X: {parseFloat(currentCoords.x).toFixed(2)}<br>
+            Z: {parseFloat(currentCoords.z).toFixed(2)}
         {:else}
             No coordinates selected yet. Click "Pick Location" and then click on the map.
         {/if}
@@ -235,25 +239,7 @@
         margin-top: 15px;
     }
     
-    button {
-        background: #cbd5e0;
-    }
-
-    .btn-primary {
-        background: #4299e1;
-        color: white;
-    }
-
-    .btn-primary:hover {
-        background: #3182ce;
-    }
-
-    .map-container {
-        position: relative;
-        flex: 1;
-        width: 100%;
-        height: 100%;
-    }
+    /* Button styles are now handled by button selectors */
 
     iframe {
         position: absolute;
