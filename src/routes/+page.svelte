@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { useAllPins } from '$lib/api/pins';
+	import { useAllPins, useNewPin } from '$lib/api/pins';
 	import { onMount } from 'svelte';
 
 	const query = useAllPins();
+	const mutation = useNewPin();
 
 	$inspect($query?.data);
 
@@ -92,6 +93,14 @@
 		);
 	}
 
+	function addPinToDB(
+		pin: { type: (typeof PIN_TYPES)[number]['value']; label: string } & Coordinate
+	) {
+		$mutation.mutate({
+			...pin
+		});
+	}
+
 	function handleAddPin(): void {
 		if (!currentCoords) {
 			updateStatus('Please select coordinates first', true);
@@ -102,6 +111,13 @@
 			updateStatus('Map not loaded yet.', true);
 			return;
 		}
+
+		$mutation.mutate({
+			type: 'dot',
+			x: Number(currentCoords.x),
+			z: Number(currentCoords.z),
+			label: pinText
+		});
 
 		// Send pin data to the iframe
 		iframe.contentWindow.postMessage(

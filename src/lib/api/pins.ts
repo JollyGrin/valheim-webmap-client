@@ -33,9 +33,8 @@ export const useAllPins = () =>
     queryFn: getAllPins
   });
 
-export const useNewPin = () => {
+export const useNewPin = () =>
   createMutation({
     mutationKey: ['new-pin'],
     mutationFn: postNewPin
   });
-};
