@@ -164,8 +164,8 @@
 	});
 </script>
 
-<div class="grid h-screen grid-rows-[150px_calc(100vh-150px)]">
-	<nav class="h-[150px] bg-slate-900 p-2">
+<div class="relative grid h-screen sm:grid-rows-[150px_calc(100vh-150px)]">
+	<nav class="hidden h-[150px] bg-slate-900 p-2 sm:block">
 		<h1>Valheim Map</h1>
 
 		<div class="nav-controls">
