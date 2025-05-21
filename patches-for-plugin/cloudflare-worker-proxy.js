@@ -5,6 +5,8 @@
  * example: http://servername.noob.club:20659
  *
  * Will be the url of your webmap
+ *
+ * Rewrites all the internal imports to use the proxy. Needed to iframe http in a https site
  * */
 
 export default {
