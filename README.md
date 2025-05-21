@@ -2,6 +2,8 @@
 
 This project provides a way to integrate the Valheim WebMap (v2.7) into an iframe with enhanced functionality for adding pins programmatically and selecting coordinates.
 
+https://github.com/h0tw1r3/valheim-webmap
+
 ## Overview
 
 The solution consists of two main components:
