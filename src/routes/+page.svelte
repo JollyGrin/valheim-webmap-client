@@ -164,8 +164,8 @@
 	});
 </script>
 
-<div class="grid h-screen grid-rows-[200px_100%]">
-	<nav class="navbar">
+<div class="grid h-screen grid-rows-[150px_calc(100vh-150px)]">
+	<nav class="h-[150px] bg-slate-900 p-2">
 		<h1>Valheim Map</h1>
 
 		<div class="nav-controls">
@@ -186,7 +186,7 @@
 			<div class="nav-buttons">
 				<button
 					id="pickBtn"
-					on:click={handlePickLocation}
+					onclick={handlePickLocation}
 					disabled={isRequestingCoords}
 					class:is-requesting={isRequestingCoords}
 				>
@@ -195,7 +195,7 @@
 
 				<button
 					id="addPinBtn"
-					on:click={handleAddPin}
+					onclick={handleAddPin}
 					disabled={!currentCoords}
 					class:is-disabled={!currentCoords}
 				>
@@ -224,7 +224,7 @@
 			title="Valheim WebMap"
 			src="https://empty-dream-fe29.innkeeper1.workers.dev/"
 			sandbox="allow-same-origin allow-scripts allow-forms"
-			on:load={handleIframeLoad}
+			onload={handleIframeLoad}
 		></iframe>
 	</div>
 </div>
@@ -348,9 +348,6 @@
 		flex: 1;
 		width: 100%;
 		position: relative;
-		border: 1px solid #ccc;
-		margin-bottom: 20px;
-		border-radius: 4px;
 		overflow: hidden;
 	}
 
