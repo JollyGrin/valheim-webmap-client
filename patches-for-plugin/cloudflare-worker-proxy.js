@@ -23,7 +23,7 @@ export default {
     } else {
       // Fall back to stored origin or hardcoded one
       // This assumes you're loading assets like /tile.webp *after* loading the initial ?url=... page
-      baseOrigin = 'http://forestofgrins.noob.club:20659'; // fallback only if needed
+      baseOrigin = 'http://servername.noob.club:20659'; // fallback only if needed
       targetUrl = baseOrigin + pathname;
     }
 
