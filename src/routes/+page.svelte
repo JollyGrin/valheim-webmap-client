@@ -1,5 +1,10 @@
 <script lang="ts">
+	import { useAllPins } from '$lib/api/pins';
 	import { onMount } from 'svelte';
+
+	const query = useAllPins();
+
+	$inspect($query?.data);
 
 	// Types
 	interface Coordinate {
@@ -13,7 +18,7 @@
 	}
 
 	interface PinType {
-		value: string;
+		value: 'dot' | 'house' | 'fire' | 'mine' | 'cave';
 		label: string;
 	}
 
@@ -24,6 +29,8 @@
 	let currentCoords: Coordinate | null = null;
 	let isRequestingCoords: boolean = false;
 	let status: Status = { message: 'Loading map...', isError: false };
+
+	let mapIsLoaded = $state(false);
 
 	// Form state
 	let pinType: string = 'dot';
@@ -36,7 +43,7 @@
 		{ value: 'fire', label: 'Fire' },
 		{ value: 'mine', label: 'Mine' },
 		{ value: 'cave', label: 'Cave' }
-	];
+	] as const;
 
 	// Event handlers
 	function handleIframeLoad(event: Event): void {
@@ -61,6 +68,27 @@
 
 		// Request coordinates from the iframe
 		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
+	}
+
+	function handleAddPinLocation(
+		pin: { type: (typeof PIN_TYPES)[number]['value']; label: string } & Coordinate
+	): void {
+		if (!iframe?.contentWindow) {
+			updateStatus('Map not loaded yet.', true);
+			return;
+		}
+
+		// Send pin data to the iframe
+		iframe.contentWindow.postMessage(
+			{
+				type: 'addPin',
+				x: pin.x.toString(),
+				z: pin.z.toString(),
+				pinType: pin.type || 'dot',
+				pinText: pin.label || 'Custom Pin'
+			},
+			'*'
+		);
 	}
 
 	function handleAddPin(): void {
@@ -113,9 +141,20 @@
 			window.removeEventListener('message', handleMessage);
 		};
 	});
+
+	$effect(() => {
+		if ($query.data) {
+			const pins = $query.data as { label: string; type: PinType['value']; x: number; z: number }[];
+			pins.forEach((pin) => {
+				handleAddPinLocation({
+					...pin
+				});
+			});
+		}
+	});
 </script>
 
-<div class="container-all">
+<div class="grid h-screen grid-rows-[200px_100%]">
 	<nav class="navbar">
 		<h1>Valheim Map</h1>
 
@@ -169,7 +208,7 @@
 		</div>
 	</nav>
 
-	<div id="map-container">
+	<div id="map-container" class=" bg-gray-500">
 		<iframe
 			id="map-iframe"
 			title="Valheim WebMap"
