@@ -68,17 +68,9 @@
             console.log('Received message from iframe:', event.data);
             
             if (event.data.type === 'canvasCoords') {
-                const { x, y } = event.data;
-                
-                // Convert to Valheim coordinates
-                const pixelSize = 12;
-                const internalCanvasSize = 2048;
-                const coordOffset = internalCanvasSize / 2;
-                
-                const normalizedX = (x / internalCanvasSize) * internalCanvasSize;
-                const normalizedY = (y / internalCanvasSize) * internalCanvasSize;
-                const worldX = ((normalizedX - coordOffset) * pixelSize).toFixed(2);
-                const worldZ = (-(normalizedY - coordOffset) * pixelSize).toFixed(2);
+                // Use the coordinates directly from the message
+                const worldX = event.data.x.toFixed(2);
+                const worldZ = event.data.y.toFixed(2);
                 
                 // Update the display
                 coordsDiv.innerHTML = `
