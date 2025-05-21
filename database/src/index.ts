@@ -2,7 +2,15 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import type { ParamsDictionary } from 'express-serve-static-core';
+import type { ParsedQs } from 'qs';
+
+// Type alias for Express request and response handlers
+type ExpressHandler<ReqBody = any, ResBody = any, ReqQuery = ParsedQs> = (
+  req: Request<ParamsDictionary, ResBody, ReqBody, ReqQuery>,
+  res: Response<ResBody>
+) => Promise<any> | void; // Allow any return type since Express handlers may return Response objects
 
 dotenv.config();
 
@@ -14,12 +22,12 @@ app.use(cors());
 app.use(express.json());
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', ((_req, res) => {
   res.json({ status: 'ok' });
-});
+}) as ExpressHandler);
 
 // Get all pins
-app.get('/pins', async (req: Request, res: Response) => {
+app.get('/pins', (async (_req, res) => {
   try {
     const pins = await prisma.pin.findMany({
       include: {
@@ -36,10 +44,10 @@ app.get('/pins', async (req: Request, res: Response) => {
     console.error('Error fetching pins:', error);
     res.status(500).json({ error: 'Failed to fetch pins' });
   }
-});
+}) as ExpressHandler);
 
 // Create a new pin
-app.post('/pins', async (req: Request, res: Response) => {
+app.post('/pins', (async (req, res) => {
   const { x, z, type, label, userId } = req.body;
 
   try {
@@ -67,10 +75,10 @@ app.post('/pins', async (req: Request, res: Response) => {
     console.error('Error creating pin:', error);
     res.status(500).json({ error: 'Failed to create pin' });
   }
-});
+}) as ExpressHandler);
 
 // Delete a pin
-app.delete('/pins/:id', async (req: Request, res: Response) => {
+app.delete('/pins/:id', (async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -82,10 +90,10 @@ app.delete('/pins/:id', async (req: Request, res: Response) => {
     console.error('Error deleting pin:', error);
     res.status(500).json({ error: 'Failed to delete pin' });
   }
-});
+}) as ExpressHandler);
 
 // Get pins by user
-app.get('/users/:userId/pins', async (req: Request, res: Response) => {
+app.get('/users/:userId/pins', (async (req, res) => {
   const { userId } = req.params;
 
   try {
@@ -105,10 +113,10 @@ app.get('/users/:userId/pins', async (req: Request, res: Response) => {
     console.error('Error fetching user pins:', error);
     res.status(500).json({ error: 'Failed to fetch user pins' });
   }
-});
+}) as ExpressHandler);
 
 // User routes
-app.post('/users', async (req: Request, res: Response) => {
+app.post('/users', (async (req, res) => {
   const { username, email, password } = req.body;
 
   try {
@@ -127,10 +135,10 @@ app.post('/users', async (req: Request, res: Response) => {
     console.error('Error creating user:', error);
     res.status(500).json({ error: 'Failed to create user' });
   }
-});
+}) as ExpressHandler);
 
 // Get all users
-app.get('/users', async (req: Request, res: Response) => {
+app.get('/users', (async (_req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -150,7 +158,7 @@ app.get('/users', async (req: Request, res: Response) => {
     console.error('Error fetching users:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
-});
+}) as ExpressHandler);
 
 // Start server
 const server = app.listen(PORT, () => {

@@ -34,11 +34,11 @@ const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', ((_req, res) => {
     res.json({ status: 'ok' });
-});
+}));
 // Get all pins
-app.get('/pins', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get('/pins', ((_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const pins = yield prisma.pin.findMany({
             include: {
@@ -56,9 +56,9 @@ app.get('/pins', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         console.error('Error fetching pins:', error);
         res.status(500).json({ error: 'Failed to fetch pins' });
     }
-}));
+})));
 // Create a new pin
-app.post('/pins', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post('/pins', ((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { x, z, type, label, userId } = req.body;
     try {
         // Verify user exists
@@ -83,9 +83,9 @@ app.post('/pins', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         console.error('Error creating pin:', error);
         res.status(500).json({ error: 'Failed to create pin' });
     }
-}));
+})));
 // Delete a pin
-app.delete('/pins/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.delete('/pins/:id', ((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
         const pin = yield prisma.pin.delete({
@@ -97,9 +97,9 @@ app.delete('/pins/:id', (req, res) => __awaiter(void 0, void 0, void 0, function
         console.error('Error deleting pin:', error);
         res.status(500).json({ error: 'Failed to delete pin' });
     }
-}));
+})));
 // Get pins by user
-app.get('/users/:userId/pins', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get('/users/:userId/pins', ((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userId } = req.params;
     try {
         const pins = yield prisma.pin.findMany({
@@ -119,9 +119,9 @@ app.get('/users/:userId/pins', (req, res) => __awaiter(void 0, void 0, void 0, f
         console.error('Error fetching user pins:', error);
         res.status(500).json({ error: 'Failed to fetch user pins' });
     }
-}));
+})));
 // User routes
-app.post('/users', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post('/users', ((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { username, email, password } = req.body;
     try {
         const user = yield prisma.user.create({
@@ -139,9 +139,9 @@ app.post('/users', (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         console.error('Error creating user:', error);
         res.status(500).json({ error: 'Failed to create user' });
     }
-}));
+})));
 // Get all users
-app.get('/users', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get('/users', ((_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const users = yield prisma.user.findMany({
             select: {
@@ -162,7 +162,7 @@ app.get('/users', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         console.error('Error fetching users:', error);
         res.status(500).json({ error: 'Failed to fetch users' });
     }
-}));
+})));
 // Start server
 const server = app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
