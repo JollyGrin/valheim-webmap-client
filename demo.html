@@ -1,0 +1,246 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Valheim Map Coordinate Picker</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				padding: 20px;
+				max-width: 1200px;
+				margin: 0 auto;
+			}
+			#map-container {
+				width: 100%;
+				height: 70vh;
+				border: 1px solid #ccc;
+				margin-bottom: 20px;
+			}
+			iframe {
+				width: 100%;
+				height: 100%;
+				border: none;
+			}
+			#coords {
+				margin: 10px 0;
+				padding: 15px;
+				background: #f5f5f5;
+				font-family: monospace;
+				font-size: 16px;
+				border-radius: 4px;
+			}
+			#status {
+				color: #2e7d32;
+				margin: 10px 0;
+				padding: 10px;
+				background: #f1f8e9;
+				border-left: 4px solid #2e7d32;
+				border-radius: 4px;
+			}
+			.error {
+				color: #d32f2f !important;
+				background: #fff3f3 !important;
+				border-left-color: #d32f2f !important;
+			}
+			button {
+				padding: 8px 16px;
+				background: #4caf50;
+				color: white;
+				border: none;
+				border-radius: 4px;
+				cursor: pointer;
+				margin: 5px 0;
+				font-size: 14px;
+			}
+			button:hover {
+				background: #45a049;
+			}
+			button:disabled {
+				background: #cccccc;
+				cursor: not-allowed;
+			}
+			#pin-controls {
+				background: #f9f9f9;
+				padding: 15px;
+				border-radius: 4px;
+				margin: 15px 0;
+				border: 1px solid #eee;
+			}
+			.form-group {
+				margin-bottom: 10px;
+			}
+			label {
+				display: block;
+				margin-bottom: 5px;
+				font-weight: bold;
+			}
+			input[type='text'],
+			select {
+				width: 100%;
+				padding: 8px;
+				border: 1px solid #ddd;
+				border-radius: 4px;
+				margin-bottom: 10px;
+			}
+			.button-group {
+				display: flex;
+				gap: 10px;
+				margin-top: 15px;
+			}
+			.button-group button {
+				flex: 1;
+			}
+			#addPinBtn {
+				background: #2196f3;
+			}
+			#addPinBtn:hover {
+				background: #1976d2;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Valheim Map Coordinate Picker</h1>
+		<div id="map-container">
+			<iframe
+				id="map-iframe"
+				src="http://forestofgrins.noob.club:20659"
+				sandbox="allow-same-origin allow-scripts"
+			></iframe>
+		</div>
+
+		<div id="pin-controls">
+			<h3>Add Pin at Selected Location</h3>
+			<div class="form-group">
+				<label for="pinType">Pin Type:</label>
+				<select id="pinType">
+					<option value="dot">Dot</option>
+					<option value="house">House</option>
+					<option value="fire">Fire</option>
+					<option value="mine">Mine</option>
+					<option value="cave">Cave</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="pinText">Pin Label (optional):</label>
+				<input type="text" id="pinText" placeholder="Enter pin label" />
+			</div>
+			<div class="button-group">
+				<button id="pickBtn" disabled>Click here first, then click on the map</button>
+				<button id="addPinBtn" disabled>Add Pin</button>
+			</div>
+		</div>
+
+		<div id="coords">
+			No coordinates selected yet. Click the button above and then click on the map.
+		</div>
+		<div id="status">Loading map...</div>
+
+		<script>
+			const iframe = document.getElementById('map-iframe');
+			const coordsDiv = document.getElementById('coords');
+			const statusEl = document.getElementById('status');
+			const pickBtn = document.getElementById('pickBtn');
+			const addPinBtn = document.getElementById('addPinBtn');
+			const pinTypeSelect = document.getElementById('pinType');
+			const pinTextInput = document.getElementById('pinText');
+
+			let currentCoords = null;
+			let isRequestingCoords = false;
+
+			function updateStatus(message, isError = false) {
+				statusEl.textContent = message;
+				statusEl.className = isError ? 'error' : '';
+				console.log(isError ? 'Error: ' + message : message);
+			}
+
+			// Listen for messages from the iframe
+			window.addEventListener('message', function (event) {
+				console.log('Received message from iframe:', event.data);
+
+				if (event.data.type === 'canvasCoords') {
+					const worldX = event.data.x.toFixed(2);
+					const worldZ = event.data.y.toFixed(2);
+					currentCoords = { x: worldX, z: worldZ };
+
+					coordsDiv.innerHTML = `
+                    <strong>Selected Coordinates:</strong><br>
+                    X: ${worldX}<br>
+                    Z: ${worldZ}
+                `;
+
+					updateStatus(
+						'Coordinates received! Click "Add Pin" to place a pin or pick a new location.'
+					);
+					pickBtn.disabled = false;
+					pickBtn.textContent = 'Pick New Location';
+					addPinBtn.disabled = false;
+					isRequestingCoords = false;
+				}
+			});
+
+			// When the pick button is clicked
+			pickBtn.addEventListener('click', function () {
+				try {
+					updateStatus('Click on the map to select coordinates...');
+					isRequestingCoords = true;
+					pickBtn.disabled = true;
+					pickBtn.textContent = 'Click on the map...';
+					addPinBtn.disabled = true;
+
+					// Send the requestCoords message to the iframe
+					iframe.contentWindow.postMessage(
+						{
+							type: 'requestCoords'
+						},
+						'*'
+					);
+
+					console.log('Sent requestCoords message to iframe');
+				} catch (e) {
+					updateStatus('Error: ' + e.message, true);
+					pickBtn.disabled = false;
+					pickBtn.textContent = 'Pick Location';
+					isRequestingCoords = false;
+				}
+			});
+
+			// When the add pin button is clicked
+			addPinBtn.addEventListener('click', function () {
+				if (!currentCoords) {
+					updateStatus('Please select coordinates first', true);
+					return;
+				}
+
+				const pinType = pinTypeSelect.value;
+				const pinText = pinTextInput.value.trim() || 'Custom Pin';
+
+				try {
+					// Send the addPin message to the iframe
+					iframe.contentWindow.postMessage(
+						{
+							type: 'addPin',
+							x: currentCoords.x,
+							z: currentCoords.z,
+							pinType: pinType,
+							pinText: pinText
+						},
+						'*'
+					);
+
+					updateStatus(`Added ${pinType} pin at (${currentCoords.x}, ${currentCoords.z})`);
+
+					// Clear the input for the next pin
+					pinTextInput.value = '';
+				} catch (e) {
+					updateStatus('Error adding pin: ' + e.message, true);
+					console.error('Error adding pin:', e);
+				}
+			});
+
+			// When iframe loads
+			iframe.onload = function () {
+				updateStatus('Map loaded. Click "Pick Location" to start placing pins.');
+				pickBtn.disabled = false;
+			};
+		</script>
+	</body>
+</html>

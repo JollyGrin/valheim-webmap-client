@@ -1,59 +1,95 @@
 # Valheim WebMap IFrame Wrapper
 
-This project provides a way to integrate the Valheim WebMap (v2.7) into an iframe with enhanced functionality for adding pins programmatically.
+This project provides a way to integrate the Valheim WebMap (v2.7) into an iframe with enhanced functionality for adding pins programmatically and selecting coordinates.
 
 ## Overview
 
 The solution consists of two main components:
+
 1. **Source**: The original WebMap files (v2.7) with minimal modifications
 2. **Wrapper**: An HTML page that embeds the WebMap in an iframe and adds pin-adding functionality
 
 ## Source Modifications
 
-### 1. Updated `index.html`
+### 1. Modified `index.html` for Coordinate Selection
 
-Added the following script to handle incoming messages for pin creation:
+Add the following script just before the closing `</body>` tag to enable coordinate selection:
 
 ```html
 <script>
-    window.addEventListener('message', function(event) {
-        if (event.data.type === 'addPin') {
-            const { x, z, pinType, pinText } = event.data;
-            if (window.valheimMap && window.valheimMap.addPin) {
-                window.valheimMap.addPin(
-                    parseFloat(x),
-                    parseFloat(z),
-                    pinType,
-                    pinText
-                );
-            }
-        }
-    });
+	window.addEventListener('message', (event) => {
+		if (event.data.type === 'requestCoords') {
+			const canvas = document.querySelector('canvas');
+			if (canvas) {
+				const clickHandler = (e) => {
+					// Get the coordinates from the coords div
+					const coordsDiv = document.querySelector('[data-id="coords"]');
+					if (coordsDiv && coordsDiv.textContent) {
+						const [x, y] = coordsDiv.textContent
+							.split(',')
+							.map((coord) => parseFloat(coord.trim()));
+
+						// Send coordinates back to parent
+						window.parent.postMessage(
+							{
+								type: 'canvasCoords',
+								x: x,
+								y: y
+							},
+							'*'
+						);
+					}
+				};
+
+				// Remove any existing click handler to prevent duplicates
+				canvas.removeEventListener('click', clickHandler);
+				// Add new click handler
+				canvas.addEventListener('click', clickHandler, { once: true });
+			}
+		}
+	});
 </script>
 ```
 
-### 2. Modified `main.js`
+### 2. Updated `index.html` for Pin Creation
+
+Add the following script to handle incoming messages for pin creation:
+
+```html
+<script>
+	window.addEventListener('message', function (event) {
+		if (event.data.type === 'addPin') {
+			const { x, z, pinType, pinText } = event.data;
+			if (window.valheimMap && window.valheimMap.addPin) {
+				window.valheimMap.addPin(parseFloat(x), parseFloat(z), pinType, pinText);
+			}
+		}
+	});
+</script>
+```
+
+### 3. Modified `main.js`
 
 Unminified and exposed pin creation functionality by adding this code before the final `})();`:
 
 ```javascript
 // Expose pin creation to the window object
 window.valheimMap = {
-    addPin: function(x, z, type = 'dot', text = '') {
-        const pin = {
-            type: type,
-            text: text,
-            x: parseFloat(x),
-            z: parseFloat(z),
-            el: null,
-            flags: {}
-        };
-        
-        // Use the app's built-in function to add the pin
-        H(pin);
-        
-        return true;
-    }
+	addPin: function (x, z, type = 'dot', text = '') {
+		const pin = {
+			type: type,
+			text: text,
+			x: parseFloat(x),
+			z: parseFloat(z),
+			el: null,
+			flags: {}
+		};
+
+		// Use the app's built-in function to add the pin
+		H(pin);
+
+		return true;
+	}
 };
 ```
 
@@ -76,30 +112,38 @@ The wrapper (`test4.html`) provides a user interface for:
 ### Message Flow
 
 1. **Requesting Coordinates**:
+
    ```javascript
-   iframe.contentWindow.postMessage({ 
-       type: "requestCoords" 
-   }, '*');
+   iframe.contentWindow.postMessage(
+   	{
+   		type: 'requestCoords'
+   	},
+   	'*'
+   );
    ```
 
 2. **Receiving Coordinates**:
+
    ```javascript
-   window.addEventListener('message', function(event) {
-       if (event.data.type === 'canvasCoords') {
-           // Handle coordinates
-       }
+   window.addEventListener('message', function (event) {
+   	if (event.data.type === 'canvasCoords') {
+   		// Handle coordinates
+   	}
    });
    ```
 
 3. **Adding a Pin**:
    ```javascript
-   iframe.contentWindow.postMessage({
-       type: 'addPin',
-       x: xCoord,
-       z: zCoord,
-       pinType: 'house',
-       pinText: 'My House'
-   }, '*');
+   iframe.contentWindow.postMessage(
+   	{
+   		type: 'addPin',
+   		x: xCoord,
+   		z: zCoord,
+   		pinType: 'house',
+   		pinText: 'My House'
+   	},
+   	'*'
+   );
    ```
 
 ## Setup Instructions
@@ -123,7 +167,7 @@ The wrapper (`test4.html`) provides a user interface for:
 
 ## Testing
 
-1. Open `test4.html` in a web browser
+1. Open `demo.html` in a web browser
 2. Click "Pick Location" and then click on the map to select coordinates
 3. Choose a pin type and optional label
 4. Click "Add Pin" to place the pin on the map
@@ -138,7 +182,7 @@ The wrapper (`test4.html`) provides a user interface for:
 
 # Original Svelte Project Documentation
 
-*The following is the original README content from the Svelte template that was used to start this project.*
+_The following is the original README content from the Svelte template that was used to start this project._
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
