@@ -312,38 +312,27 @@
         overflow: hidden;
     }
     
-    #pin-controls {
-        background: #f9f9f9;
-        padding: 20px;
-        border-radius: 4px;
-        margin: 15px 0;
-        border: 1px solid #eee;
+    /* Responsive styles */
+    @media (max-width: 768px) {
+        .nav-controls {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .coords-display {
+            margin: 10px 0 0 0;
+            justify-content: space-between;
+        }
     }
     
-    .form-group {
-        margin-bottom: 15px;
-    }
-    
-    label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-        color: #333;
-    }
-    
-    input[type='text'],
-    select {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-    }
-    
-    .button-group {
-        display: flex;
-        gap: 10px;
-        margin-top: 15px;
+    @media (max-width: 480px) {
+        .nav-buttons {
+            flex-direction: column;
+        }
+        
+        button {
+            width: 100%;
+        }
     }
     
     /* Button styles are now handled by button selectors */
