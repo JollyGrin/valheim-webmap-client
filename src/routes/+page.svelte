@@ -119,7 +119,63 @@
 </script>
 
 <div class="container">
-    <h1>Valheim Map Coordinate Picker</h1>
+    <nav class="navbar">
+        <h1>Valheim Map</h1>
+        
+        <div class="nav-controls">
+            <div class="form-group">
+                <label for="pinType">Pin Type:</label>
+                <select id="pinType" bind:value={pinType}>
+                    {#each PIN_TYPES as type}
+                        <option value={type.value}>{type.label}</option>
+                    {/each}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="pinText">Label:</label>
+                <input 
+                    type="text" 
+                    id="pinText" 
+                    bind:value={pinText}
+                    placeholder="Enter pin label" 
+                />
+            </div>
+            
+            <div class="nav-buttons">
+                <button 
+                    id="pickBtn" 
+                    on:click={handlePickLocation}
+                    disabled={isRequestingCoords}
+                    class:is-requesting={isRequestingCoords}
+                >
+                    {isRequestingCoords ? 'Click on map...' : 'Pick Location'}
+                </button>
+                
+                <button 
+                    id="addPinBtn" 
+                    on:click={handleAddPin}
+                    disabled={!currentCoords}
+                    class:is-disabled={!currentCoords}
+                >
+                    Add Pin
+                </button>
+            </div>
+            
+            <div class="coords-display">
+                {#if currentCoords}
+                    <div class="coord">X: {parseFloat(currentCoords.x).toFixed(2)}</div>
+                    <div class="coord">Z: {parseFloat(currentCoords.z).toFixed(2)}</div>
+                {:else}
+                    <div class="no-coords">No location selected</div>
+                {/if}
+            </div>
+        </div>
+        
+        <div id="status" class:error={status.isError}>
+            {status.message}
+        </div>
+    </nav>
     
     <div id="map-container">
         <iframe
@@ -130,75 +186,126 @@
             on:load={handleIframeLoad}
         ></iframe>
     </div>
-
-    <div id="pin-controls">
-        <h3>Add Pin at Selected Location</h3>
-        <div class="form-group">
-            <label for="pinType">Pin Type:</label>
-            <select id="pinType" bind:value={pinType}>
-                {#each PIN_TYPES as type}
-                    <option value={type.value}>{type.label}</option>
-                {/each}
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="pinText">Pin Label (optional):</label>
-            <input 
-                type="text" 
-                id="pinText" 
-                bind:value={pinText}
-                placeholder="Enter pin label" 
-            />
-        </div>
-        <div class="button-group">
-            <button 
-                id="pickBtn" 
-                on:click={handlePickLocation}
-                disabled={isRequestingCoords}
-            >
-                {isRequestingCoords ? 'Click on the map...' : 'Pick Location'}
-            </button>
-            <button 
-                id="addPinBtn" 
-                on:click={handleAddPin}
-                disabled={!currentCoords}
-            >
-                Add Pin
-            </button>
-        </div>
-    </div>
-
-    <div id="coords">
-        {#if currentCoords}
-            <strong>Selected Coordinates:</strong><br>
-            X: {parseFloat(currentCoords.x).toFixed(2)}<br>
-            Z: {parseFloat(currentCoords.z).toFixed(2)}
-        {:else}
-            No coordinates selected yet. Click "Pick Location" and then click on the map.
-        {/if}
-    </div>
-    
-    <div id="status" class:error={status.isError}>
-        {status.message}
-    </div>
 </div>
 
 <style>
-    .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 20px;
+    :global(body) {
+        margin: 0;
+        padding: 0;
         font-family: Arial, sans-serif;
     }
     
-    h1 {
-        color: #333;
-        margin-bottom: 20px;
+    .container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100%;
+    }
+    
+    .navbar {
+        background: #2c3e50;
+        color: white;
+        padding: 10px 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    .navbar h1 {
+        margin: 0 0 10px 0;
+        color: white;
+        font-size: 1.5rem;
+    }
+    
+    .nav-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        align-items: center;
+    }
+    
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .form-group label {
+        font-size: 0.8rem;
+        color: #ecf0f1;
+    }
+    
+    select, input[type="text"] {
+        padding: 6px 10px;
+        border: 1px solid #34495e;
+        border-radius: 4px;
+        background: #34495e;
+        color: white;
+    }
+    
+    .nav-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    button {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.2s;
+    }
+    
+    button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    
+    #pickBtn {
+        background: #3498db;
+        color: white;
+    }
+    
+    #pickBtn.is-requesting {
+        background: #e67e22;
+    }
+    
+    #addPinBtn {
+        background: #2ecc71;
+        color: white;
+    }
+    
+    #addPinBtn.is-disabled {
+        background: #7f8c8d;
+    }
+    
+    .coords-display {
+        display: flex;
+        gap: 15px;
+        margin-left: auto;
+        color: #ecf0f1;
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+    
+    .no-coords {
+        color: #bdc3c7;
+    }
+    
+    #status {
+        margin-top: 10px;
+        padding: 5px 0;
+        font-size: 0.9rem;
+        color: #2ecc71;
+    }
+    
+    #status.error {
+        color: #e74c3c;
     }
     
     #map-container {
+        flex: 1;
         width: 100%;
-        height: 70vh;
+        position: relative;
         border: 1px solid #ccc;
         margin-bottom: 20px;
         border-radius: 4px;
