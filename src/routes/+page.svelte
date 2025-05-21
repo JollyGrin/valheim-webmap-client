@@ -1,5 +1,11 @@
 <script lang="ts">
+	import { useAllPins, useNewPin } from '$lib/api/pins';
 	import { onMount } from 'svelte';
+
+	const query = useAllPins();
+	const mutation = useNewPin();
+
+	$inspect($query?.data);
 
 	// Types
 	interface Coordinate {
@@ -13,7 +19,7 @@
 	}
 
 	interface PinType {
-		value: string;
+		value: 'dot' | 'house' | 'fire' | 'mine' | 'cave';
 		label: string;
 	}
 
@@ -21,13 +27,15 @@
 	let iframe: HTMLIFrameElement | null = null;
 
 	// State
-	let currentCoords: Coordinate | null = null;
-	let isRequestingCoords: boolean = false;
-	let status: Status = { message: 'Loading map...', isError: false };
+	let currentCoords: Coordinate | null = $state(null);
+	let isRequestingCoords: boolean = $state(false);
+	let status: Status = $state({ message: 'Loading map...', isError: false });
+
+	let mapIsLoaded = $state(false);
 
 	// Form state
-	let pinType: string = 'dot';
-	let pinText: string = '';
+	let pinType: string = $state('dot');
+	let pinText: string = $state('');
 
 	// Constants
 	const PIN_TYPES: PinType[] = [
@@ -36,13 +44,14 @@
 		{ value: 'fire', label: 'Fire' },
 		{ value: 'mine', label: 'Mine' },
 		{ value: 'cave', label: 'Cave' }
-	];
+	] as const;
 
 	// Event handlers
 	function handleIframeLoad(event: Event): void {
 		const target = event.target as HTMLIFrameElement;
 		iframe = target;
 		updateStatus('Map loaded. Click "Pick Location" to start placing pins.');
+		mapIsLoaded = true;
 	}
 
 	function updateStatus(message: string, isError: boolean = false): void {
@@ -63,6 +72,27 @@
 		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
 	}
 
+	function handleAddPinLocation(
+		pin: { type: (typeof PIN_TYPES)[number]['value']; label: string } & Coordinate
+	): void {
+		if (!iframe?.contentWindow) {
+			updateStatus('Map not loaded yet.', true);
+			return;
+		}
+
+		// Send pin data to the iframe
+		iframe.contentWindow.postMessage(
+			{
+				type: 'addPin',
+				x: pin.x.toString(),
+				z: pin.z.toString(),
+				pinType: pin.type || 'dot',
+				pinText: pin.label || 'Custom Pin'
+			},
+			'*'
+		);
+	}
+
 	function handleAddPin(): void {
 		if (!currentCoords) {
 			updateStatus('Please select coordinates first', true);
@@ -73,6 +103,13 @@
 			updateStatus('Map not loaded yet.', true);
 			return;
 		}
+
+		$mutation.mutate({
+			type: 'dot',
+			x: Number(currentCoords.x),
+			z: Number(currentCoords.z),
+			label: pinText
+		});
 
 		// Send pin data to the iframe
 		iframe.contentWindow.postMessage(
@@ -113,9 +150,21 @@
 			window.removeEventListener('message', handleMessage);
 		};
 	});
+
+	$effect(() => {
+		if (!mapIsLoaded) return;
+		if ($query.data) {
+			const pins = $query.data as { label: string; type: PinType['value']; x: number; z: number }[];
+			pins.forEach((pin) => {
+				handleAddPinLocation({
+					...pin
+				});
+			});
+		}
+	});
 </script>
 
-<div class="container-all">
+<div class="grid h-screen grid-rows-[200px_100%]">
 	<nav class="navbar">
 		<h1>Valheim Map</h1>
 
@@ -169,7 +218,7 @@
 		</div>
 	</nav>
 
-	<div id="map-container">
+	<div id="map-container" class=" bg-gray-500">
 		<iframe
 			id="map-iframe"
 			title="Valheim WebMap"
