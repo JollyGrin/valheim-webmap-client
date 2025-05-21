@@ -123,7 +123,7 @@
 			<div class="form-group">
 				<label for="pinType">Pin Type:</label>
 				<select id="pinType" bind:value={pinType}>
-					{#each PIN_TYPES as type}
+					{#each PIN_TYPES as type (type)}
 						<option value={type.value}>{type.label}</option>
 					{/each}
 				</select>
