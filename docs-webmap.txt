@@ -1,0 +1,3577 @@
+Directory structure:
+└── h0tw1r3-valheim-webmap/
+    ├── README.md
+    ├── build.cake
+    ├── build.sh
+    ├── docker-bake.hcl
+    ├── Dockerfile
+    ├── entrypoint.sh
+    ├── LICENSE
+    ├── manifest.json
+    ├── package.json
+    ├── screenshot.webp
+    ├── libs/
+    │   └── README.md
+    ├── WebMap/
+    │   ├── Config.cs
+    │   ├── DiscordWebHook.cs
+    │   ├── MapDataServer.cs
+    │   ├── WebMap.cs
+    │   ├── WebMap.csproj
+    │   ├── Patches/
+    │   │   ├── StringExtensionMethods_Patch.cs
+    │   │   └── ZroutedRpc_Patch.cs
+    │   ├── web/
+    │   │   ├── drawdown.js
+    │   │   ├── index.html
+    │   │   ├── style.css
+    │   │   └── tile.webp
+    │   └── web-src/
+    │       ├── constants.js
+    │       ├── index.js
+    │       ├── map.js
+    │       ├── onPointers.js
+    │       ├── players.js
+    │       ├── ui.js
+    │       └── websocket.js
+    └── .config/
+        └── dotnet-tools.json
+
+================================================
+FILE: README.md
+================================================
+# Valheim WebMap
+
+This server side mod creates a web based map that shows live players and allows shared exploration. After port forwarding the correct port, you can share `http://your_ip:port` to anyone else and they can see the map too. **Clients do not need to have any mods installed!**
+
+For players to show up on the map, they must set **visible to other players** in the in-game map screen. Press `m` to bring up the map settings.
+
+Currently only works with Valheim dedicated server.
+
+## Features
+
+* A explorable map of your Valheim world in your browser that you can zoom with the mousewheel or pinch zoom on mobile.
+* Players can place their own pins with chat commands (see below for more info)
+* Map pings from in game players will show up on the web map as well.
+* Connected players list.
+* Auto follow player feature.
+* Connect and chat messages.
+* Discord server status and player join/leave notifications.
+
+![screenshot](screenshot.webp)
+
+## Installation
+
+1. Assuming you have [BepInEx] installed and working, place the WebMap directory in:
+
+       Steam\steamapps\common\Valheim dedicated server\BepInEx\plugins\WebMap
+
+2. After starting the server for the first time a default configuration file will be created in:
+
+       Steam\steamapps\common\Valheim dedicated server\BepInEx\config
+
+3. Stop the server, edit the configuration, start the server. Always stop the server
+   before making configuration changes, _otherwise they will be lost on shutdown_.
+
+## Updating
+
+If you are updating, one additional thing you and anyone else using the web map might need to do is __clear your browser cache__.
+
+You may also be able to hold down the `shift` key and click the reload button in your browser.
+
+## Chat Commands
+
+This mod supports placing pins with chat commands. Press `Enter` to start chatting in game. The commands are as follows:
+
+* `!pin` - Place a "dot" pin with no text on the map where you are currently standing.
+* `!pin my pin name` - Place a "dot" pin with "my pin name" under it on the map where you are currently standing.
+* `!pin [pin-type] [text]` - Place a pin of a certain type with optional text under it on the map where you are currently standing.
+    * Pin types are: `dot`, `fire`, `mine`, `house` and `cave`. Example command: `/pin house my awesome base`
+* `!undoPin` - Delete your most recent pin.
+* `!deletePin [text]` - Delete the most recent pin that matches the text exactly.
+
+If a player creates too many pins, their oldest pin will be removed. There is a setting to control how many pins a player can create.
+
+_Commands are not case sensitive._
+
+## Licence
+
+Where applicable, assume stuff is under the MIT licence.
+
+## Credit
+
+* Currently maintained by [Jeff Clark](https://github.com/h0tw1r3)
+* Original work by [Kyle Paulsen](https://github.com/kylepaulsen)
+* Background by [webtreats], released under the [CC BY 2.0] license.
+
+[BepInEx]: https://github.com/BepInEx/BepInEx
+[node]: https://nodejs.org/en/download/
+[webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254
+[CC BY 2.0]: https://creativecommons.org/licenses/by/2.0/
+
+
+
+================================================
+FILE: build.cake
+================================================
+using Cake.Core.IO;
+using Cake.Common.Diagnostics;
+using Cake.Common.Tools.DotNet;
+
+#addin "nuget:?package=Cake.Npm&version=5.1.0"
+#load "./build/AssemblyPublicizerTool.cake"
+
+var target = Argument("target", "Build");
+var configuration = Argument("configuration", "Release");
+
+var tempDir = System.IO.Path.GetTempPath();
+
+var publicizerInputPath = "./libs/valheim/";
+var publicizerOutputPath = publicizerInputPath;
+
+if (DirectoryExists("/opt/steam/libs"))
+{
+    publicizerInputPath = "/opt/steam/libs/";
+    publicizerOutputPath = tempDir;
+}
+
+var assembliesToPublicize = new[]
+{
+    new { Input = $"{publicizerInputPath}assembly_utils.dll",   Output = $"{publicizerOutputPath}assembly_utils.public.dll" },
+    new { Input = $"{publicizerInputPath}assembly_valheim.dll", Output = $"{publicizerOutputPath}assembly_valheim.public.dll" }
+};
+
+Task("Clean")
+    .Does(() =>
+{
+    DotNetClean("./WebMap/WebMap.csproj", new DotNetCleanSettings
+    {
+        Configuration = configuration,
+    });
+
+    CleanDirectory($"./WebMap/obj");
+    DeleteFiles("./WebMap/web/main.js");
+    foreach (var asm in assembliesToPublicize)
+    {
+      DeleteFiles(asm.Output);
+    }
+});
+
+Task("Publicize")
+    .Does((context) =>
+{
+    var publicizer = new AssemblyPublicizerTool(context);
+
+    foreach (var asm in assembliesToPublicize)
+    {
+        var inputFile = context.FileSystem.GetFile(asm.Input);
+        var outputFile = context.FileSystem.GetFile(asm.Output);
+
+        bool needsPublicizing = !outputFile.Exists ||
+            System.IO.File.GetLastWriteTimeUtc(outputFile.Path.FullPath) < System.IO.File.GetLastWriteTimeUtc(inputFile.Path.FullPath);
+
+        if (needsPublicizing)
+        {
+            publicizer.Publicize(asm.Input, asm.Output);
+        }
+        else
+        {
+            context.Information($"Skipping publicize for {asm.Input} (already up-to-date).");
+        }
+    }
+});
+
+var BuildTask = Task("Build")
+    .Does(() =>
+{
+    DotNetBuild("./WebMap/WebMap.csproj", new DotNetBuildSettings
+    {
+        Configuration = configuration,
+    });
+});
+
+if (HasArgument("rebuild")) {
+    BuildTask.IsDependentOn("Clean");
+}
+BuildTask.IsDependentOn("Publicize");
+BuildTask.IsDependentOn("BuildNpm");
+
+Task("BuildNpm").Does(() => {
+    var settings = new NpmInstallSettings();
+
+    settings.LogLevel = NpmLogLevel.Info;
+    settings.WorkingDirectory = "./";
+    settings.Production = true;
+
+    NpmInstall(settings);
+
+    if (configuration.Equals("Debug"))
+    {
+        NpmRunScript("build-dev");
+    }
+    else
+    {
+        NpmRunScript("build");
+    }
+});
+
+RunTarget(target);
+
+
+
+================================================
+FILE: build.sh
+================================================
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_NOLOGO=1
+
+dotnet tool restore
+
+dotnet cake "$@"
+
+
+
+================================================
+FILE: docker-bake.hcl
+================================================
+variable "RELEASE" {
+  default = "dev"
+}
+
+variable "BEPINEX_RELEASE" {
+  default = "5.4.23.2"
+}
+
+target "default" {
+  dockerfile = "Dockerfile"
+  target = "build"
+  args = {
+    BEPINEX_RELEASE = "${BEPINEX_RELEASE}"
+  }
+  tags = [
+    "valheim-mod-builder:${RELEASE}"
+  ]
+  platforms = [
+    "linux/amd64"
+  ]
+}
+
+target "init" {
+  dockerfile = "Dockerfile"
+  target = "init"
+  tags = [
+    "valheim-mod-builder-init:${RELEASE}"
+  ]
+  platforms = [
+    "linux/amd64"
+  ]
+}
+
+
+
+================================================
+FILE: Dockerfile
+================================================
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-base
+
+ENV DEBIAN_NONINTERACTIVE=1
+ENV PATH="$PATH:~/.dotnet/tools:/opt/steam"
+ENV LANG="C.UTF-8"
+ENV TZ="Etc/UTC"
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_NOLOGO=1
+
+SHELL ["/bin/bash", "-exu", "-o", "pipefail", "-c"]
+
+RUN <<EOF
+passwd -d root
+
+cat <<EOD >/etc/apt/apt.conf.d/docker-clean
+APT::Install-Recommends "0";
+APT::Install-Suggests "0";
+Acquire::Retries "5";
+Dpkg::Use-Pty "0";
+Dpkg::Progress-Fancy "0";
+Binary::apt::APT::Keep-Downloaded-Packages "true";
+APT::Keep-Downloaded-Packages "true";
+EOD
+
+EOF
+
+FROM dotnet-base AS dotnet
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update -q && \
+    apt-get install -qy npm webpack unzip vim-tiny lib32gcc-s1 util-linux dumb-init && \
+    find /var/log -name '*.log' -delete
+
+# 6.0 runtime is currently required for BepInEx Assembly Publicizer Cli
+RUN /usr/lib/apt/apt-helper download-file https://dot.net/v1/dotnet-install.sh /usr/local/bin/dotnet-install.sh && \
+    chmod +x /usr/local/bin/dotnet-install.sh && \
+    dotnet-install.sh -c 6.0 -i /usr/share/dotnet --runtime dotnet && \
+    dotnet workload update
+
+ARG BEPINEX_RELEASE
+FROM dotnet AS steam
+
+RUN <<EOF
+groupadd -g 500 steam
+useradd -m -d /opt/steam -u 500 -g 500 steam
+passwd -d steam >/dev/null
+EOF
+
+USER steam
+WORKDIR /opt/steam
+
+RUN <<EOF
+curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf -
+ln -s ~/steamcmd.sh ~/steamcmd
+steamcmd +login anonymous +quit
+EOF
+
+FROM steam AS game
+
+RUN <<EOF
+steamcmd +force_install_dir "/opt/steam/valheim" +login anonymous +app_update 896660 +quit
+EOF
+
+FROM dotnet AS build
+
+RUN <<EOF
+/usr/lib/apt/apt-helper download-file https://github.com/BepInEx/BepInEx/releases/download/v${BEPINEX_RELEASE}/BepInEx_win_x64_${BEPINEX_RELEASE}.zip bepinex.zip
+unzip bepinex.zip BepInEx/*
+mv BepInEx /usr/local/share/BepInEx-${BEPINEX_RELEASE}
+ln -s /usr/local/share/BepInEx-${BEPINEX_RELEASE} /opt/BepInEx
+rm bepinex.zip
+EOF
+
+COPY --from=game /opt/steam/valheim/valheim_server_Data/Managed /opt/steam/libs
+
+USER root
+WORKDIR /build
+
+RUN chmod a+rx /root
+
+COPY entrypoint.sh /.entrypoint.sh
+
+ENTRYPOINT ["/.entrypoint.sh"]
+
+
+
+================================================
+FILE: entrypoint.sh
+================================================
+#!/bin/bash
+
+# re-entrant script to support automatically switching to an unprivileged user
+# that matches the ownership of the RUN_WORKDIR (see below)
+
+set -eu
+shopt -s nullglob inherit_errexit
+
+error_trap() {
+  local el=${1:=??} ec=${2:=??} lc="$BASH_COMMAND"
+  echo >&2 "ERROR in $(basename $0) : line $el error $ec : $lc"
+  exit ${2:=1}
+}
+trap 'error_trap ${LINENO} ${?}' ERR
+
+RUN_USER=build
+RUN_WORKDIR="${PWD}"
+
+ARGS=("$@")
+if [ "${#ARGS[@]}" -eq 0 ] ; then
+    ARGS+=("/bin/bash")
+fi
+
+[ -z "${UID:-}" ] && UID=$(id -u)
+[ -z "${GID:-}" ] && GID=$(id -g)
+
+[ "$UID" -ne 0 ] && RUNNING_NON_ROOT=1
+
+# check if required path is mounted
+if ! grep -sq " ${RUN_WORKDIR} " < /proc/mounts ; then
+  echo >&2 "error: ${RUN_WORKDIR} is not mounted in the container." ; exit 1
+fi
+
+create_user() {
+  if [ "$1" -gt 0 ] ; then
+    if [ "$2" -gt 0 ] ; then
+      su - -c "groupadd -g $2 $RUN_USER" 2>/dev/null || true
+    fi
+    su - -c "useradd -m -d $3 -u $1 -g $2 $RUN_USER ; passwd -d $RUN_USER >/dev/null"
+  fi
+}
+
+# skip if re-running under newly created user
+if [ -z "${ENTRYPOINT_RELOAD:-}" ] ; then
+  if [ -z "${RUNNING_NON_ROOT:-}" ] ;  then
+    RUN_UID=$(stat -c '%u' "$RUN_WORKDIR")
+    RUN_GID=$(stat -c '%g' "$RUN_WORKDIR")
+    [ "$RUN_UID" -eq 0 ] && RUN_USER="root"
+  fi
+  create_user "$RUN_UID" "$RUN_GID" "/home/${RUN_USER}"
+  # copy dotnet cache to new user
+  cp -r /root/.dotnet /root/.nuget /root/.cache /root/.local "/home/${RUN_USER}/"
+  chown -R "${RUN_USER}:" "/home/${RUN_USER}"
+  # re-run with new user
+  export HOME=$(getent passwd $RUN_USER | cut -d: -f6)
+  export ENTRYPOINT_RELOAD=1
+  exec runuser -m -P -g $RUN_USER -u $RUN_USER -- "$0" "${ARGS[@]}"
+  exit
+fi
+
+# sanity check supported volumes
+for volume in ${RUN_WORKDIR} ; do
+  if [ ! -w "$volume" ] ; then
+    echo >&2 "error: unable to write to ${volume}. Ensure permissions are correct on the host." ; exit 1
+  fi
+  if ! find "$volume/." -maxdepth 1 -name '.' \( -uid "$UID" -a -perm -u+rw \) -o \( -group "$GID" -a -perm -g+rw \) -exec true {} + ; then
+    echo >&2 "warning: inconsistent user/group ownership or permissions on ${volume}."
+  fi
+done
+
+dotnet tool restore
+
+"${ARGS[@]}"
+
+
+
+================================================
+FILE: LICENSE
+================================================
+Copyright 2021 Jeffrey Clark
+Copyright 2021 Kyle Paulsen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: manifest.json
+================================================
+{
+    "name": "WebMap",
+    "description": "A Valheim dedicated server mod to host a web accessible map.",
+    "website_url": "https://github.com/h0tw1r3/valheim-webmap",
+    "version_number": "2.7.0",
+    "dependencies": []
+}
+
+
+
+================================================
+FILE: package.json
+================================================
+{
+  "name": "webmap",
+  "version": "2.7.0",
+  "description": "A Valheim map viewer for the browser",
+  "scripts": {
+    "build-dev": "webpack ./WebMap/web-src/index.js -o ./WebMap/web --mode development",
+    "build": "webpack ./WebMap/web-src/index.js -o ./WebMap/web --mode production"
+  },
+  "author": "Jeffrey Clark <h0tw1r3@users.noreply.github.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "webpack": "^5.98.0",
+    "webpack-cli": "^4.6.0"
+  }
+}
+
+
+
+================================================
+FILE: screenshot.webp
+================================================
+[Non-text file]
+
+
+================================================
+FILE: libs/README.md
+================================================
+External requirements:
+
+1. Extract the current release of [BepInEx](https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.2/BepInEx_win_x64_5.4.23.2.zip)
+   to this directory and rename to `BepInEx`
+2. Create a directory named `valhiem` and copy these files from your Valhiem
+   installation into it:
+   ```
+   assembly_utils.dll
+   assembly_valheim.dll
+   Mono.Security.dll
+   UnityEngine.CoreModule.dll
+   UnityEngine.dll
+   UnityEngine.ImageConversionModule.dll
+   UnityEngine.JSONSerializeModule.dll
+   ```
+3. _Publicize_ the utils and valheim assemblies.
+   The most straight-forward was to do this is with the provided cake build
+   file. From the project directory root, run in a terminal:
+   ```
+   dotnet tool restore
+   dotnet cake --target=Publicize
+   ```
+
+
+
+================================================
+FILE: WebMap/Config.cs
+================================================
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using BepInEx.Configuration;
+using UnityEngine;
+
+namespace WebMap
+{
+    internal static class WebMapConfig
+    {
+        public static int TEXTURE_SIZE = 2048;
+        public static int PIXEL_SIZE = 12;
+        public static float EXPLORE_RADIUS = 100f;
+        public static float UPDATE_FOG_TEXTURE_INTERVAL = 2f;
+        public static float SAVE_FOG_TEXTURE_INTERVAL = 30f;
+        public static int MAX_PINS_PER_USER = 50;
+        public static int MAX_MESSAGES = 100;
+        public static bool ALWAYS_MAP = true;
+        public static bool ALWAYS_VISIBLE = false;
+        public static bool DEBUG = false;
+        public static bool TEST = false;
+
+        public static int SERVER_PORT = 3000;
+        public static float PLAYER_UPDATE_INTERVAL = 1f;
+        public static bool CACHE_SERVER_FILES = true;
+
+        public static string WORLD_NAME = "";
+        public static Vector3 WORLD_START_POS = Vector3.zero;
+        public static int DEFAULT_ZOOM = 100;
+
+        public static string DISCORD_WEBHOOK = "";
+        public static string DISCORD_INVITE_URL = "";
+
+        public static string URL = "";
+
+        public static void ReadConfigFile(ConfigFile config)
+        {
+            TEXTURE_SIZE = config.Bind("Texture", "texture_size",
+                WebMapConfig.TEXTURE_SIZE,
+                "How large is the map texture? Probably dont change this.").Value;
+
+            PIXEL_SIZE = config.Bind("Texture", "pixel_size",
+                WebMapConfig.PIXEL_SIZE,
+                "How many in game units does a map pixel represent? Probably dont change this.").Value;
+
+            EXPLORE_RADIUS = config.Bind<float>("Texture", "explore_radius",
+                WebMapConfig.EXPLORE_RADIUS,
+                "A larger explore_radius reveals the map more quickly.").Value;
+
+            UPDATE_FOG_TEXTURE_INTERVAL = config.Bind<float>("Interval", "update_fog_texture_interval",
+                WebMapConfig.UPDATE_FOG_TEXTURE_INTERVAL,
+                "How often do we update the fog texture on the server in seconds.").Value;
+
+            SAVE_FOG_TEXTURE_INTERVAL = config.Bind<float>("Interval", "save_fog_texture_interval",
+                WebMapConfig.SAVE_FOG_TEXTURE_INTERVAL,
+                "How often do we save the fog texture in seconds.").Value;
+
+            MAX_PINS_PER_USER = config.Bind("User", "max_pins_per_user",
+                WebMapConfig.MAX_PINS_PER_USER,
+                "How many pins each client is allowed to make before old ones start being deleted.").Value;
+
+            SERVER_PORT = config.Bind("Server", "server_port",
+                WebMapConfig.SERVER_PORT,
+                "HTTP port for the website. The map will be display on this site.").Value;
+
+            PLAYER_UPDATE_INTERVAL = config.Bind("Interval", "player_update_interval",
+                WebMapConfig.PLAYER_UPDATE_INTERVAL,
+                "How often do we send position data to web browsers in seconds.").Value;
+
+            CACHE_SERVER_FILES = config.Bind("Server", "cache_server_files",
+                WebMapConfig.CACHE_SERVER_FILES,
+                "Should the server cache web files to be more performant?").Value;
+
+            DEFAULT_ZOOM = config.Bind("Texture", "default_zoom",
+                WebMapConfig.DEFAULT_ZOOM,
+                "How zoomed in should the web map start at? Higher is more zoomed in.").Value;
+
+            MAX_MESSAGES = config.Bind("Server", "max_messages",
+                WebMapConfig.MAX_MESSAGES,
+                "How many messages to keep buffered and display to client.").Value;
+
+            ALWAYS_MAP = config.Bind("User", "always_map",
+                WebMapConfig.ALWAYS_MAP,
+                "Update the map to show where hidden players have traveled.").Value;
+
+            ALWAYS_VISIBLE = config.Bind("User", "always_visible",
+                WebMapConfig.ALWAYS_VISIBLE,
+                "Completely ignore the players preference to be hidden.").Value;
+
+            DEBUG = config.Bind("Server", "debug",
+                WebMapConfig.DEBUG,
+                "Output debugging information.").Value;
+
+            DEBUG = config.Bind("Server", "test",
+                WebMapConfig.TEST,
+                "Enable test features (bugs).").Value;
+
+            DISCORD_WEBHOOK = config.Bind("Server", "discord_webhook",
+                WebMapConfig.DISCORD_WEBHOOK,
+                "Discord webhook URL").Value;
+
+            DISCORD_INVITE_URL = config.Bind("Server", "discord_invite_url",
+                WebMapConfig.DISCORD_INVITE_URL,
+                "Optional Discord invite URL to be added to the webpage.").Value;
+
+            URL = config.Bind("Server", "webmap_url",
+                WebMapConfig.URL,
+                "URL to view the web map.").Value;
+        }
+
+        public static string GetWorldName()
+        {
+            if (ZNet.instance != null)
+            {
+                WORLD_NAME = ZNet.instance.GetWorldName();
+            }
+            else
+            {
+                string[] arguments = Environment.GetCommandLineArgs();
+                string worldName = "";
+                for (int t = 0; t < arguments.Length; t++)
+                    if (arguments[t] == "-world")
+                    {
+                        worldName = arguments[t + 1];
+                        break;
+                    }
+                WORLD_NAME = worldName;
+            }
+            return WORLD_NAME;
+        }
+
+        public static string MakeClientConfigJson()
+        {
+            Dictionary<string, object> config = new Dictionary<string, object>();
+
+            config["world_name"] = GetWorldName();
+            config["world_start_pos"] = WORLD_START_POS;
+            config["default_zoom"] = DEFAULT_ZOOM;
+            config["texture_size"] = TEXTURE_SIZE;
+            config["pixel_size"] = PIXEL_SIZE;
+            config["update_interval"] = PLAYER_UPDATE_INTERVAL;
+            config["explore_radius"] = EXPLORE_RADIUS;
+            config["max_messages"] = MAX_MESSAGES;
+            config["always_map"] = ALWAYS_MAP;
+            config["always_visible"] = ALWAYS_VISIBLE;
+
+            string json = DictionaryToJson(config);
+            return json;
+        }
+
+        static string DictionaryToJson(Dictionary<string, object> dict)
+        {
+            var entries = dict.Select(d =>
+            {
+                switch (d.Value)
+                {
+                    case float o:
+                        return $"\"{d.Key}\": {o.ToString("F2", CultureInfo.InvariantCulture)}";
+                    case double o:
+                        return $"\"{d.Key}\": {o.ToString("F2", CultureInfo.InvariantCulture)}";
+                    case string o:
+                        return $"\"{d.Key}\": \"{o}\"";
+                    case bool o:
+                        return $"\"{d.Key}\": {o.ToString().ToLower()}";
+                    case Vector3 o:
+                        return $"\"{d.Key}\": \"{o.x.ToString("F2", CultureInfo.InvariantCulture)}," +
+                               $"{o.y.ToString("F2", CultureInfo.InvariantCulture)}," +
+                               $"{o.z.ToString("F2", CultureInfo.InvariantCulture)}\"";
+                    default:
+                        return $"\"{d.Key}\": {d.Value}";
+                }
+            });
+            return "{\n    " + string.Join(",\n    ", entries) + "\n}\n";
+        }
+    }
+}
+
+
+
+================================================
+FILE: WebMap/DiscordWebHook.cs
+================================================
+﻿using System;
+using System.Collections.Specialized;
+using System.Net;
+using WebSocketSharp;
+
+namespace WebMap
+{
+    public class DiscordWebHook : IDisposable
+    {
+        private readonly WebClient webClient;
+        private readonly static NameValueCollection values = new NameValueCollection();
+        private readonly string webHookUrl;
+
+        public DiscordWebHook(string url)
+        {
+            webHookUrl = url;
+            webClient = new WebClient();
+        }
+
+        public void SendMessage(string msgSend)
+        {
+            values.Remove("content");
+            values.Add("content", msgSend);
+
+            if (webHookUrl.IsNullOrEmpty())
+            {
+                ZLog.Log($"WebMap::DiscordWebHook::SendMessage: {values}");
+                return;
+            }
+            webClient.UploadValues(webHookUrl, values);
+        }
+
+        public void Dispose()
+        {
+            webClient.Dispose();
+        }
+    }
+}
+
+
+================================================
+FILE: WebMap/MapDataServer.cs
+================================================
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Reflection;
+using System.Text;
+using UnityEngine;
+using WebSocketSharp;
+using WebSocketSharp.Net;
+using WebSocketSharp.Server;
+using static WebMap.WebMapConfig;
+
+namespace WebMap
+{
+    [Serializable]
+    public struct MapMessage
+    {
+        public long id;
+        public int type;
+        public string name;
+        public string message;
+        public string ts;
+
+        public MapMessage(long id, int type, string name, string message)
+        {
+            this.id = id;
+            this.type = type;
+            this.name = name;
+            this.message = message;
+            this.ts = DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        public string ToJson()
+        {
+            return JsonUtility.ToJson(this);
+        }
+    }
+
+    public class WebSocketHandler : WebSocketBehavior
+    {
+        protected override void OnOpen()
+        {
+            string endpoint = Context.Headers.Get("X-Forwarded-For");
+            if (endpoint.IsNullOrEmpty())
+            {
+                endpoint = Context.UserEndPoint.ToString();
+            }
+            ZLog.Log("WebMap: new visitor connected from " + endpoint);
+            base.OnOpen();
+        }
+
+        // protected override void OnClose(CloseEventArgs e) {
+        // }
+
+        protected override void OnMessage(MessageEventArgs e)
+        {
+            if (e.Data.ToString() == "players")
+            {
+                Send(MapDataServer.getInstance().getPlayerResponse(true));
+            }
+            base.OnMessage(e);
+        }
+    }
+
+    public class MapDataServer
+    {
+        private static readonly Dictionary<string, string> contentTypes = new Dictionary<string, string> {
+            {"html", "text/html"},
+            {"js", "text/javascript"},
+            {"css", "text/css"},
+            {"png", "image/png"},
+            {"jpg", "image/jpeg"},
+            {"webp", "image/webp"}
+        };
+
+        private readonly System.Threading.Timer broadcastTimer;
+        private readonly Dictionary<string, byte[]> fileCache;
+        public Texture2D fogTexture;
+        private readonly HttpServer httpServer;
+
+        public byte[] mapImageData;
+        public List<string> pins = new List<string>();
+        public List<MapMessage> sentMessages = new List<MapMessage>();
+        public List<MapMessage> newMessages = new List<MapMessage>();
+        public List<ZNetPeer> players = new List<ZNetPeer>();
+        public string lastPlayerResponse = "";
+        private bool forceReload = false;
+        private readonly string publicRoot;
+        private readonly WebSocketServiceHost webSocketHandler;
+        private static MapDataServer __instance;
+
+        public MapDataServer()
+        {
+            __instance = this;
+
+            httpServer = new HttpServer(SERVER_PORT);
+            httpServer.AddWebSocketService<WebSocketHandler>("/");
+            httpServer.KeepClean = true;
+
+            webSocketHandler = httpServer.WebSocketServices["/"];
+
+            broadcastTimer = new System.Threading.Timer(e =>
+            {
+                string dataString = "";
+                if (forceReload)
+                {
+                    webSocketHandler.Sessions.Broadcast("reload\n");
+                    forceReload = false;
+                }
+                else
+                {
+                    dataString = getPlayerResponse(false);
+                    if (dataString != lastPlayerResponse)
+                    {
+                        webSocketHandler.Sessions.Broadcast(dataString);
+                        lastPlayerResponse = dataString;
+                    }
+
+                    if (newMessages.Count > 0)
+                    {
+                        List<string> tosend = new List<string>();
+
+                        newMessages.ForEach(message =>
+                        {
+                            if (WebMapConfig.MAX_MESSAGES < sentMessages.Count) sentMessages.RemoveAt(0);
+                            tosend.Add(message.ToJson());
+                            sentMessages.Add(message);
+                        });
+                        if (tosend.Count > 0) webSocketHandler.Sessions.Broadcast("messages\n[" + string.Join(",", tosend) + "]");
+                        newMessages.Clear();
+                        newMessages.TrimExcess();
+                    }
+                }
+            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(PLAYER_UPDATE_INTERVAL));
+
+            publicRoot = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty, "web");
+
+            fileCache = new Dictionary<string, byte[]>();
+
+            httpServer.OnGet += (sender, e) =>
+            {
+                HttpListenerRequest req = e.Request;
+
+                if (ProcessSpecialRoutes(e)) return;
+
+                ServeStaticFiles(e);
+            };
+        }
+
+        public string getPlayerResponse(bool sendLast)
+        {
+            if (sendLast && lastPlayerResponse.Length > 0)
+            {
+                return lastPlayerResponse;
+            }
+
+            string dataString = "players\n";
+
+            players.ForEach(player =>
+            {
+                ZDO zdoData = null;
+                try
+                {
+                    zdoData = ZDOMan.instance.GetZDO(player.m_characterID);
+                }
+                catch { }
+
+                if (zdoData != null)
+                {
+                    Vector3 pos = zdoData.GetPosition();
+                    int maxHealth = (int)Math.Ceiling(zdoData.GetFloat("max_health", 25));
+                    int health = (int)Math.Ceiling(zdoData.GetFloat("health", maxHealth));
+                    int dead = zdoData.GetBool("dead") ? 1 : 0;
+                    int pvp = zdoData.GetBool("pvp") ? 1 : 0;
+                    int inbed = zdoData.GetBool("inBed") ? 1 : 0;
+
+                    maxHealth = Math.Max(maxHealth, health);
+
+                    dataString += $"{player.m_uid}\n{player.m_playerName}\n{health}\n{maxHealth}\n";
+                    if (!player.m_publicRefPos)
+                        dataString += "hidden\n";
+                    if (player.m_publicRefPos || WebMapConfig.ALWAYS_VISIBLE || WebMapConfig.ALWAYS_MAP)
+                        dataString += FormattableString.Invariant($"{pos.x:0.##},{pos.z:0.##}\n");
+                    dataString += $"{dead}{pvp}{inbed}\n\n";
+                }
+
+            });
+            return dataString.Trim();
+        }
+
+        public static MapDataServer getInstance()
+        {
+            return __instance;
+        }
+        public void Stop()
+        {
+            broadcastTimer.Dispose();
+            httpServer.Stop();
+        }
+
+        private void ServeStaticFiles(HttpRequestEventArgs e)
+        {
+            HttpListenerRequest req = e.Request;
+            HttpListenerResponse res = e.Response;
+
+            string rawRequestPath = req.RawUrl;
+            if (rawRequestPath == "/") rawRequestPath = "/index.html";
+
+            string[] pathParts = rawRequestPath.Split('/');
+            string requestedFile = pathParts[pathParts.Length - 1];
+            string[] fileParts = requestedFile.Split('.');
+            string fileExt = fileParts[fileParts.Length - 1];
+
+            if (contentTypes.ContainsKey(fileExt))
+            {
+                byte[] requestedFileBytes = new byte[0];
+                if (fileCache.ContainsKey(requestedFile))
+                {
+                    requestedFileBytes = fileCache[requestedFile];
+                }
+                else
+                {
+                    string filePath = Path.Combine(publicRoot, requestedFile);
+                    try
+                    {
+                        requestedFileBytes = File.ReadAllBytes(filePath);
+                        if (CACHE_SERVER_FILES) fileCache.Add(requestedFile, requestedFileBytes);
+                    }
+                    catch (Exception ex)
+                    {
+                        ZLog.LogError("WebMap: FAILED TO READ FILE! " + ex.Message);
+                    }
+                }
+
+                if (requestedFileBytes.Length > 0)
+                {
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
+                    res.ContentType = contentTypes[fileExt];
+                    res.StatusCode = 200;
+                    res.ContentLength64 = requestedFileBytes.Length;
+                    res.Close(requestedFileBytes, true);
+                }
+                else
+                {
+                    res.StatusCode = 404;
+                    res.Close();
+                }
+            }
+            else
+            {
+                res.StatusCode = 404;
+                res.Close();
+            }
+        }
+
+        private bool ProcessSpecialRoutes(HttpRequestEventArgs e)
+        {
+            HttpListenerRequest req = e.Request;
+            HttpListenerResponse res = e.Response;
+            string rawRequestPath = req.RawUrl;
+            byte[] textBytes;
+
+            switch (rawRequestPath)
+            {
+                case "/config":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(MakeClientConfigJson());
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
+                case "/map":
+                    // Doing things this way to make the full map harder to accidentally see.
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
+                    res.ContentType = "application/octet-stream";
+                    res.StatusCode = 200;
+                    res.ContentLength64 = mapImageData.Length;
+                    res.Close(mapImageData, true);
+                    return true;
+                case "/fog":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "image/png";
+                    res.StatusCode = 200;
+                    byte[] fogBytes = fogTexture.EncodeToPNG();
+                    res.ContentLength64 = fogBytes.Length;
+                    res.Close(fogBytes, true);
+                    return true;
+                case "/messages":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "applicaion/json";
+                    res.StatusCode = 200;
+                    List<string> tosend = new List<string>();
+                    sentMessages.ForEach(message =>
+                    {
+                        tosend.Add(message.ToJson());
+                    });
+                    textBytes = Encoding.UTF8.GetBytes("[" + string.Join(", ", tosend) + "]");
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
+                case "/pins":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "text/csv";
+                    res.StatusCode = 200;
+                    string text = string.Join("\n", pins);
+                    textBytes = Encoding.UTF8.GetBytes(text);
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void Reload()
+        {
+            forceReload = true;
+        }
+
+        public void ListenAsync()
+        {
+            httpServer.Start();
+
+            if (httpServer.IsListening)
+                ZLog.Log($"WebMap: HTTP Server Listening on port {SERVER_PORT}");
+            else
+                ZLog.LogError("WebMap: HTTP Server Failed To Start !!!");
+        }
+
+        public void BroadcastPing(long id, string name, Vector3 position)
+        {
+            webSocketHandler.Sessions.Broadcast($"ping\n{id}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}");
+        }
+
+        public void BroadcastMessage(long id, int type, string name, string message)
+        {
+            webSocketHandler.Sessions.Broadcast($"message\n{id}\n{type}\n{name}\n{message}");
+        }
+
+        public void AddPin(string id, string pinId, string type, string name, Vector3 position, string pinText)
+        {
+            pins.Add($"{id},{pinId},{type},{name},{FixedValue(position.x)},{FixedValue(position.z)},{pinText}");
+            webSocketHandler.Sessions.Broadcast(
+                $"pin\n{id}\n{pinId}\n{type}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}\n{pinText}");
+        }
+
+        public void RemovePin(int idx)
+        {
+            string pin = pins[idx];
+            string[] pinParts = pin.Split(',');
+            pins.RemoveAt(idx);
+            webSocketHandler.Sessions.Broadcast($"rmpin\n{pinParts[1]}");
+        }
+
+        public void AddMessage(long id, int type, string name, string message)
+        {
+            newMessages.Add(new MapMessage(id, type, name, message));
+        }
+
+        private static string FixedValue(float f)
+        {
+            return f.ToString("F2", CultureInfo.InvariantCulture);
+        }
+    }
+}
+
+
+
+================================================
+FILE: WebMap/WebMap.cs
+================================================
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using WebMap.Patches;
+using BepInEx;
+using HarmonyLib;
+using UnityEngine;
+using static ZRoutedRpc;
+using Random = UnityEngine.Random;
+using System.Runtime.InteropServices;
+using System.Collections;
+using System.Dynamic;
+
+namespace WebMap
+{
+    //This attribute is required, and lists metadata for your plugin.
+    //The GUID should be a unique ID for this plugin, which is human readable (as it is used in places like the config). I like to use the java package notation, which is "com.[your name here].[your plugin name here]"
+    //The name is the name of the plugin that's displayed on load, and the version number just specifies what version the plugin is.
+    [BepInPlugin(GUID, NAME, VERSION)]
+
+    //This is the main declaration of our plugin class. BepInEx searches for all classes inheriting from BaseUnityPlugin to initialize on startup.
+    //BaseUnityPlugin itself inherits from MonoBehaviour, so you can use this as a reference for what you can declare and use in your plugin class: https://docs.unity3d.com/ScriptReference/MonoBehaviour.html
+    public class WebMap : BaseUnityPlugin
+    {
+        public const string GUID = "com.github.h0tw1r3.valheim.webmap";
+        public const string NAME = "WebMap";
+        public const string VERSION = "2.7.0";
+
+        private static readonly string[] ALLOWED_PINS = { "dot", "fire", "mine", "house", "cave" };
+
+        public DiscordWebHook discordWebHook;
+        public static MapDataServer mapDataServer;
+        public static string worldDataPath;
+        public static string mapDataPath;
+        public static string pluginPath;
+
+        public static int sayMethodHash = 0;
+        public static int chatMessageMethodHash = 0;
+
+        public static bool fogTextureNeedsSaving;
+
+        public static string currentWorldName;
+        public static Dictionary<string, object> serverInfo;
+
+        private static Harmony harmony;
+
+        public static WebMap instance;
+
+        //The Awake() method is run at the very start when the game is initialized.
+        public void Awake()
+        {
+            instance = this;
+            harmony = new Harmony(GUID);
+            harmony.PatchAll(Assembly.GetExecutingAssembly());
+
+            pluginPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            mapDataPath = Path.Combine(pluginPath ?? string.Empty, "map_data");
+            Directory.CreateDirectory(mapDataPath);
+
+            WebMapConfig.ReadConfigFile(Config);
+
+            discordWebHook = new DiscordWebHook(WebMapConfig.DISCORD_WEBHOOK);
+        }
+
+        public void OnDestroy()
+        {
+             Config.Save();
+        }
+
+        public void Online()
+        {
+            StaticCoroutine.Start(SaveFogTextureLoop());
+            StaticCoroutine.Start(UpdateFogTextureLoop());
+            NotifyOnline();
+        }
+
+        public void SetServerInfo(bool openServer, bool publicServer, string serverName, string password, string worldName, string worldSeed)
+        {
+            serverInfo = new Dictionary<string, object>();
+            serverInfo.Add("openServer", openServer);
+            serverInfo.Add("publicServer", publicServer);
+            serverInfo.Add("serverName", serverName);
+            serverInfo.Add("password", password);
+            serverInfo.Add("worldName", worldName);
+            serverInfo.Add("worldSeed", worldSeed);
+        }
+
+        public void NotifyOnline()
+        {
+            discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** is *online* 🟢\n💻 {AccessTools.Method(typeof(ZNet), "GetServerIP").Invoke(ZNet.instance, new object[] { })}:{ZNet.instance.m_hostPort}\n🔑 {serverInfo["password"]}\n🗺 {WebMapConfig.URL}");
+        }
+
+        public void NotifyOffline()
+        {
+            discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** is *offline* 🔴");
+        }
+
+        public void NotifyJoin(ZNetPeer peer)
+        {
+            string message = $"player _{peer.m_playerName}_ joined";
+            discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
+            mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
+        }
+
+        public void NotifyLeave(ZNetPeer peer)
+        {
+            string message = $"player _{peer.m_playerName}_ left";
+            discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
+            MessageHud.instance.MessageAll(MessageHud.MessageType.Center, message);
+            mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
+        }
+
+        public void NewWorld()
+        {
+            string worldName = WebMapConfig.GetWorldName();
+            bool forceReload = (currentWorldName != worldName);
+
+            worldDataPath = Path.Combine(mapDataPath, WebMapConfig.GetWorldName());
+            Directory.CreateDirectory(worldDataPath);
+
+            if (mapDataServer == null)
+            {
+                ZLog.Log($"WebMap: loading existing world: #{worldName}");
+                mapDataServer = new MapDataServer();
+            }
+            else if (forceReload)
+            {
+                ZLog.Log($"WebMap: loading a new world! old: #{currentWorldName} new: #{worldName}");
+            }
+
+            currentWorldName = worldName;
+
+            string mapImagePath = Path.Combine(worldDataPath, "map.png");
+            try
+            {
+                mapDataServer.mapImageData = File.ReadAllBytes(mapImagePath);
+            }
+            catch (Exception e)
+            {
+                ZLog.LogError("WebMap: Failed to read map image data from disk. " + e.Message);
+            }
+
+            string fogImagePath = Path.Combine(worldDataPath, "fog.png");
+            try
+            {
+                Texture2D fogTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE);
+                byte[] fogBytes = File.ReadAllBytes(fogImagePath);
+                fogTexture.LoadImage(fogBytes);
+                mapDataServer.fogTexture = fogTexture;
+            }
+            catch (Exception e)
+            {
+                ZLog.LogWarning("WebMap: Failed to read fog image data from disk... Making new fog image..." + e.Message);
+                Texture2D fogTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE,
+                    TextureFormat.R8, false);
+                Color32[] fogColors = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                for (int t = 0; t < fogColors.Length; t++) fogColors[t] = Color.black;
+
+                fogTexture.SetPixels32(fogColors);
+                byte[] fogPngBytes = fogTexture.EncodeToPNG();
+
+                mapDataServer.fogTexture = fogTexture;
+                try
+                {
+                    File.WriteAllBytes(fogImagePath, fogPngBytes);
+                }
+                catch (Exception ex)
+                {
+                    ZLog.LogError("WebMap: FAILED TO WRITE FOG FILE! " + ex.Message);
+                }
+            }
+
+            string mapPinsFile = Path.Combine(worldDataPath, "pins.csv");
+            try
+            {
+                string[] pinsLines = File.ReadAllLines(mapPinsFile);
+                mapDataServer.pins = new List<string>(pinsLines);
+            }
+            catch (Exception e)
+            {
+                ZLog.LogError("WebMap: Failed to read pins.csv from disk. " + e.Message);
+            }
+
+            if (forceReload)
+            {
+                mapDataServer.Reload();
+            }
+        }
+
+        public IEnumerator UpdateFogTextureLoop()
+        {
+            while(true)
+            {
+                yield return new WaitForSeconds(WebMapConfig.UPDATE_FOG_TEXTURE_INTERVAL);
+                UpdateFogTexture();
+            }
+        }
+
+        public void UpdateFogTexture()
+        {
+            int pixelExploreRadius = (int)Mathf.Ceil(WebMapConfig.EXPLORE_RADIUS / WebMapConfig.PIXEL_SIZE);
+            int pixelExploreRadiusSquared = pixelExploreRadius * pixelExploreRadius;
+            int halfTextureSize = WebMapConfig.TEXTURE_SIZE / 2;
+
+            mapDataServer.players.ForEach(player =>
+            {
+                if (player.m_publicRefPos || WebMapConfig.ALWAYS_MAP || WebMapConfig.ALWAYS_VISIBLE)
+                {
+                    ZDO zdoData = null;
+                    try
+                    {
+                        zdoData = ZDOMan.instance.GetZDO(player.m_characterID);
+                    }
+                    catch { }
+
+                    if (zdoData != null)
+                    {
+                        Vector3 pos = zdoData.GetPosition();
+                        int pixelX = Mathf.RoundToInt(pos.x / WebMapConfig.PIXEL_SIZE + halfTextureSize);
+                        int pixelY = Mathf.RoundToInt(pos.z / WebMapConfig.PIXEL_SIZE + halfTextureSize);
+                        for (int y = pixelY - pixelExploreRadius; y <= pixelY + pixelExploreRadius; y++)
+                        {
+                            for (int x = pixelX - pixelExploreRadius; x <= pixelX + pixelExploreRadius; x++)
+                                if (y >= 0 && x >= 0 && y < WebMapConfig.TEXTURE_SIZE &&
+                                    x < WebMapConfig.TEXTURE_SIZE)
+                                {
+                                    int xDiff = pixelX - x;
+                                    int yDiff = pixelY - y;
+                                    int currentExploreRadiusSquared = xDiff * xDiff + yDiff * yDiff;
+                                    if (currentExploreRadiusSquared < pixelExploreRadiusSquared)
+                                    {
+                                        Color fogTexColor = mapDataServer.fogTexture.GetPixel(x, y);
+                                        if (fogTexColor != Color.white)
+                                        {
+                                            if (WebMapConfig.DEBUG && !fogTextureNeedsSaving) ZLog.Log("Fog needs saving");
+                                            fogTextureNeedsSaving = true;
+                                            mapDataServer.fogTexture.SetPixel(x, y, Color.white);
+                                        }
+                                    }
+                                }
+                        }
+                    }
+                }
+            });
+        }
+
+        public IEnumerator SaveFogTextureLoop()
+        {
+            while(true)
+            {
+                yield return new WaitForSeconds(WebMapConfig.SAVE_FOG_TEXTURE_INTERVAL);
+                SaveFogTexture();
+            }
+        }
+
+        public void SaveFogTexture()
+        {
+            if (mapDataServer.players.Count > 0 && fogTextureNeedsSaving)
+            {
+                byte[] pngBytes = mapDataServer.fogTexture.EncodeToPNG();
+
+                if (WebMapConfig.DEBUG) ZLog.Log("Saving Fog");
+
+                try
+                {
+                    File.WriteAllBytes(Path.Combine(worldDataPath, "fog.png"), pngBytes);
+                    fogTextureNeedsSaving = false;
+                }
+                catch (Exception e)
+                {
+                    ZLog.LogError("WebMap: FAILED TO WRITE FOG FILE! " + e.Message);
+                }
+            }
+        }
+
+        public static void SavePins()
+        {
+            string mapPinsFile = Path.Combine(worldDataPath, "pins.csv");
+            try
+            {
+                File.WriteAllLines(mapPinsFile, mapDataServer.pins);
+            }
+            catch (Exception e)
+            {
+                ZLog.Log("WebMap: FAILED TO WRITE PINS FILE! " + e.Message);
+            }
+        }
+
+        [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.Start))]
+        private class ZoneSystemPatch
+        {
+            private static readonly Color DeepWaterColor = new Color(0.36105883f, 0.36105883f, 0.43137255f);
+            private static readonly Color ShallowWaterColor = new Color(0.574f, 0.50709206f, 0.47892025f);
+            private static readonly Color ShoreColor = new Color(0.1981132f, 0.12241901f, 0.1503943f);
+
+            private static Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome)
+            {
+                Color noForest = new Color(0f, 0f, 0f, 0f);
+                Color forest = new Color(1f, 0f, 0f, 0f);
+
+                if (height < ZoneSystem.instance.m_waterLevel) return noForest;
+
+                if (biome == Heightmap.Biome.Meadows)
+                {
+                    if (!WorldGenerator.InForest(new Vector3(wx, 0f, wy))) return noForest;
+
+                    return forest;
+                }
+
+                if (biome == Heightmap.Biome.Plains)
+                {
+                    if (WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) >= 0.8f) return noForest;
+
+                    return forest;
+                }
+
+                if (biome == Heightmap.Biome.BlackForest || biome == Heightmap.Biome.Mistlands) return forest;
+
+                return noForest;
+            }
+
+            private static Color GetPixelColor(Heightmap.Biome biome)
+            {
+                Color m_meadowsColor = new Color(0.573f, 0.655f, 0.361f);
+                Color m_swampColor = new Color(0.639f, 0.447f, 0.345f);
+                Color m_mountainColor = new Color(1f, 1f, 1f);
+                Color m_blackforestColor = new Color(0.420f, 0.455f, 0.247f);
+                Color m_heathColor = new Color(0.906f, 0.671f, 0.470f);
+                Color m_ashlandsColor = new Color(0.690f, 0.192f, 0.192f);
+                Color m_deepnorthColor = new Color(1f, 1f, 1f);
+                Color m_mistlandsColor = new Color(0.36f, 0.22f, 0.4f);
+
+                switch (biome)
+                {
+                    case Heightmap.Biome.Meadows:
+                        return m_meadowsColor;
+                    case Heightmap.Biome.Swamp:
+                        return m_swampColor;
+                    case Heightmap.Biome.Mountain:
+                        return m_mountainColor;
+                    case Heightmap.Biome.BlackForest:
+                        return m_blackforestColor;
+                    case Heightmap.Biome.Plains:
+                        return m_heathColor;
+                    case Heightmap.Biome.AshLands:
+                        return m_ashlandsColor;
+                    case Heightmap.Biome.DeepNorth:
+                        return m_deepnorthColor;
+                    case Heightmap.Biome.Ocean:
+                        return Color.white;
+                    case Heightmap.Biome.Mistlands:
+                        return m_mistlandsColor;
+                    default:
+                        return Color.white;
+                }
+            }
+
+            private static void Postfix(ZoneSystem __instance)
+            {
+                WebMap.instance.NewWorld();
+
+                if (mapDataServer.mapImageData != null)
+                {
+                    ZLog.Log("WebMap: MAP ALREADY BUILT!");
+                    return;
+                }
+
+                ZLog.Log("WebMap: BUILD MAP!");
+
+                int num = WebMapConfig.TEXTURE_SIZE / 2;
+                float num2 = WebMapConfig.PIXEL_SIZE / 2f;
+                Color mask;
+                Color32[] colorArray = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                Color32[] treeMaskArray = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                float[] heightArray = new float[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
+                for (int i = 0; i < WebMapConfig.TEXTURE_SIZE; i++)
+                {
+                    for (int j = 0; j < WebMapConfig.TEXTURE_SIZE; j++)
+                    {
+                        float wx = (float)(j - num) * WebMapConfig.PIXEL_SIZE + num2;
+                        float wy = (float)(i - num) * WebMapConfig.PIXEL_SIZE + num2;
+                        Heightmap.Biome biome = WorldGenerator.instance.GetBiome(wx, wy);
+                        float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out mask);
+                        colorArray[i * WebMapConfig.TEXTURE_SIZE + j] = GetPixelColor(biome);
+                        treeMaskArray[i * WebMapConfig.TEXTURE_SIZE + j] = GetMaskColor(wx, wy, biomeHeight, biome);
+                        heightArray[i * WebMapConfig.TEXTURE_SIZE + j] = biomeHeight;
+                    }
+                }
+
+                float waterLevel = ZoneSystem.instance.m_waterLevel;
+                Vector3 sunDir = new Vector3(-0.57735f, 0.57735f, 0.57735f);
+                Color[] newColors = new Color[colorArray.Length];
+
+                for (int t = 0; t < colorArray.Length; t++)
+                {
+                    float h = heightArray[t];
+
+                    int tUp = t - WebMapConfig.TEXTURE_SIZE;
+                    if (tUp < 0) tUp = t;
+
+                    int tDown = t + WebMapConfig.TEXTURE_SIZE;
+                    if (tDown > colorArray.Length - 1) tDown = t;
+
+                    int tRight = t + 1;
+                    if (tRight > colorArray.Length - 1) tRight = t;
+
+                    int tLeft = t - 1;
+                    if (tLeft < 0) tLeft = t;
+
+                    float hUp = heightArray[tUp];
+                    float hRight = heightArray[tRight];
+                    float hLeft = heightArray[tLeft];
+                    float hDown = heightArray[tDown];
+
+                    Vector3 va = new Vector3(2f, 0f, hRight - hLeft).normalized;
+                    Vector3 vb = new Vector3(0f, 2f, hUp - hDown).normalized;
+                    Vector3 normal = Vector3.Cross(va, vb);
+
+                    float surfaceLight = Vector3.Dot(normal, sunDir) * 0.25f + 0.75f;
+
+                    float shoreMask = Mathf.Clamp(h - waterLevel, 0, 1);
+                    float shallowRamp = Mathf.Clamp((h - waterLevel + 0.2f * 12.5f) * 0.5f, 0, 1);
+                    float deepRamp = Mathf.Clamp((h - waterLevel + 1f * 12.5f) * 0.1f, 0, 1);
+
+                    Color32 mapColor = colorArray[t];
+                    Color ans = Color.Lerp(ShoreColor, mapColor, shoreMask);
+                    ans = Color.Lerp(ShallowWaterColor, ans, shallowRamp);
+                    ans = Color.Lerp(DeepWaterColor, ans, deepRamp);
+
+                    newColors[t] = new Color(ans.r * surfaceLight, ans.g * surfaceLight, ans.b * surfaceLight, ans.a);
+                }
+
+                Texture2D newTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE,
+                    TextureFormat.RGBA32, false);
+                newTexture.SetPixels(newColors);
+                byte[] pngBytes = newTexture.EncodeToPNG();
+
+                mapDataServer.mapImageData = pngBytes;
+                try
+                {
+                    File.WriteAllBytes(Path.Combine(worldDataPath, "map.png"), pngBytes);
+                    ZLog.Log("WebMap: BUILDING MAP DONE!");
+                }
+                catch (Exception e)
+                {
+                    ZLog.LogError("WebMap: FAILED TO WRITE MAP FILE! " + e.Message);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.Load))]
+        private class ZoneSystemLoadPatch
+        {
+            private static void Postfix()
+            {
+                ZoneSystem.LocationInstance startLocation;
+                if (ZoneSystem.instance.FindClosestLocation("StartTemple", Vector3.zero, out startLocation))
+                {
+                    var p = startLocation.m_position;
+                    WebMapConfig.WORLD_START_POS = p;
+                    ZLog.Log("WebMap: starting point " + WebMapConfig.WORLD_START_POS.ToString());
+                }
+                else
+                {
+                    ZLog.LogError("WebMap: failed to find starting point");
+                }
+
+                WebMap.instance.Online();
+
+                mapDataServer.ListenAsync();
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.Start))]
+        private class ZNetPatchStart
+        {
+            private static void Postfix(List<ZNetPeer> ___m_peers)
+            {
+                mapDataServer.players = ___m_peers;
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.Shutdown))]
+        private class ZNetPatchShutdown
+        {
+            private static void Postfix()
+            {
+                mapDataServer.Stop();
+                WebMap.instance.NotifyOffline();
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.SetServer))]
+        private class ZNetPatchSetServer
+        {
+            private static void Postfix(bool server, bool openServer, bool publicServer, string serverName, string password, World world)
+            {
+                WebMap.instance.SetServerInfo(openServer, publicServer, serverName, password, world.m_name, world.m_seedName);
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.Disconnect))]
+        private class ZNetPatchDisconnect
+        {
+            private static void Prefix(ref ZNetPeer peer)
+            {
+                if (!peer.m_server && !string.IsNullOrEmpty(peer.m_playerName))
+                {
+                    WebMap.instance.NotifyLeave(peer);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.AddPeer))]
+        private class ZRoutedRpcAddPeerPatch
+        {
+            private static void Postfix(ZNetPeer peer)
+            {
+                if (!peer.m_server && !string.IsNullOrEmpty(peer.m_playerName))
+                {
+                    WebMap.instance.NotifyJoin(peer);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
+        private class ZRoutedRpcPatch
+        {
+            private static string[] ignoreRpc = { "DestroyZDO", "SetEvent", "OnTargeted", "Step" };
+
+            private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data)
+            {
+                string methodName = StringExtensionMethods_Patch.GetStableHashName(data?.m_methodHash ?? 0);
+                if (Array.Exists(ignoreRpc, x => x == methodName)) // Ignore noise
+                    return;
+
+                if (WebMapConfig.DEBUG)
+                {
+                    ZLog.Log("HandleRoutedRPC: " + methodName);
+                }
+
+                ZNetPeer peer = ZNet.instance.GetPeer(data.m_senderPeerID);
+                string steamid = "";
+                try
+                {
+                    steamid = peer.m_rpc.GetSocket().GetHostName();
+                }
+                catch
+                {
+                    // ignored
+                }
+
+                if (data?.m_methodHash == sayMethodHash || data?.m_methodHash == "Say".GetStableHashCode())
+                {
+                    sayMethodHash = data.m_methodHash;
+                    try
+                    {
+                        ZDO zdoData = ZDOMan.instance.GetZDO(peer.m_characterID);
+                        Vector3 pos = zdoData.GetPosition();
+                        var package = data.m_parameters;
+                        var messageType = package.ReadInt();
+                        var userInfo = new UserInfo();
+                        userInfo.Deserialize(ref package);
+                        string message = package.ReadString() ?? "";
+                        message = message.Trim();
+
+                        if (message.ToUpper().StartsWith("!PIN"))
+                        {
+                            string[] messageParts = message.Split(' ');
+                            string pinType = "dot";
+                            int startIdx = 1;
+                            if (messageParts.Length > 1 && Array.Exists(ALLOWED_PINS, e => e == messageParts[1].ToLower()))
+                            {
+                                pinType = messageParts[1].ToLower();
+                                startIdx = 2;
+                            }
+
+                            string pinText = "";
+                            if (startIdx < messageParts.Length)
+                                pinText = string.Join(" ", messageParts, startIdx, messageParts.Length - startIdx);
+
+                            if (pinText.Length > 20) pinText = pinText.Substring(0, 20);
+
+                            string safePinsText = Regex.Replace(pinText, "[^a-zA-Z0-9 ]", "");
+
+                            long timestamp = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+
+                            string pinId = $"{timestamp}-{Random.Range(1000, 9999)}";
+                            mapDataServer.AddPin(steamid, pinId, pinType, userInfo.Name, pos, safePinsText);
+
+                            List<string> usersPins = mapDataServer.pins.FindAll(pin => pin.StartsWith(steamid));
+                            int numOverflowPins = usersPins.Count - WebMapConfig.MAX_PINS_PER_USER;
+                            for (int t = numOverflowPins; t > 0; t--)
+                            {
+                                int pinIdx = mapDataServer.pins.FindIndex(pin => pin.StartsWith(steamid));
+                                mapDataServer.RemovePin(pinIdx);
+                            }
+
+                            SavePins();
+                        }
+                        else if (message.ToUpper().StartsWith("!UNDOPIN"))
+                        {
+                            int pinIdx = mapDataServer.pins.FindLastIndex(pin => pin.StartsWith(steamid));
+                            if (pinIdx > -1)
+                            {
+                                mapDataServer.RemovePin(pinIdx);
+                                SavePins();
+                            }
+                        }
+                        else if (message.ToUpper().StartsWith("!DELETEPIN"))
+                        {
+                            string[] messageParts = message.Split(' ');
+                            string pinText = "";
+                            if (messageParts.Length > 1)
+                                pinText = string.Join(" ", messageParts, 1, messageParts.Length - 1);
+
+                            int pinIdx = mapDataServer.pins.FindLastIndex(pin =>
+                            {
+                                string[] pinParts = pin.Split(',');
+                                return pinParts[0] == steamid && pinParts[pinParts.Length - 1] == pinText;
+                            });
+
+                            if (pinIdx > -1)
+                            {
+                                mapDataServer.RemovePin(pinIdx);
+                                SavePins();
+                            }
+                        }
+                        else
+                        {
+                            if (messageType != (int)Talker.Type.Whisper)
+                            {
+                                mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
+                            }
+                            ZLog.Log($"WebMap: (say) {pos} | {messageType} | {userInfo.Name} | {message}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        if (WebMapConfig.DEBUG) ZLog.LogError(ex.ToString());
+                    }
+                }
+                else if (data?.m_methodHash == chatMessageMethodHash || data?.m_methodHash == "ChatMessage".GetStableHashCode())
+                {
+                    chatMessageMethodHash = data.m_methodHash;
+                    try
+                    {
+                        ZPackage package = new ZPackage(data.m_parameters.GetArray());
+                        Vector3 pos = package.ReadVector3();
+                        var messageType = package.ReadInt();
+                        var userInfo = new UserInfo();
+                        userInfo.Deserialize(ref package);
+
+                        if (messageType == (int)Talker.Type.Ping)
+                        {
+                            mapDataServer.BroadcastPing(data.m_senderPeerID, userInfo.Name, pos);
+                            ZLog.Log($"WebMap: (ping) {pos} | {messageType} | {userInfo.Name}");
+                        }
+                        else
+                        {
+                            var message = package.ReadString() ?? "";
+                            message = message.Trim();
+
+                            mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
+                            ZLog.Log($"WebMap: (chat) {pos} | {messageType} | {userInfo.Name} | {message}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        if (WebMapConfig.DEBUG) ZLog.LogError(ex.ToString());
+                    }
+                }
+            }
+        }
+    }
+
+    public class StaticCoroutine {
+        private static StaticCoroutineRunner runner;
+
+        public static Coroutine Start(IEnumerator coroutine) {
+            EnsureRunner();
+            return runner.StartCoroutine(coroutine);
+        }
+
+        private static void EnsureRunner() {
+            if (runner == null) {
+                runner = new GameObject("[Static Coroutine Runner]").AddComponent<StaticCoroutineRunner>();
+                UnityEngine.Object.DontDestroyOnLoad(runner.gameObject);
+            }
+        }
+
+        private class StaticCoroutineRunner : MonoBehaviour { }
+    }
+}
+
+
+
+================================================
+FILE: WebMap/WebMap.csproj
+================================================
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>2.7.0</Version>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <Copyright>(c) 2024 Various Authors</Copyright>
+    <AssemblyTitle>Valheim WebMap</AssemblyTitle>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>portable</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>portable</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <TempDir>$([System.IO.Path]::GetTempPath())</TempDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath Condition="Exists('\opt\BepInEx')">\opt\BepInEx\core\0Harmony.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\BepInEx')">..\libs\BepInEx\core\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath Condition="Exists('\opt\BepInEx')">\opt\BepInEx\core\BepInEx.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\BepInEx')">..\libs\BepInEx\core\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx.Harmony">
+      <HintPath Condition="Exists('\opt\BepInEx')">\opt\BepInEx\core\BepInEx.Harmony.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\BepInEx')">..\libs\BepInEx\core\BepInEx.Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="assembly_valheim">
+      <HintPath Condition="Exists('$(TempDir)assembly_valheim.public.dll')">$(TempDir)assembly_valheim.public.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\assembly_valheim.public.dll</HintPath>
+    </Reference>
+    <Reference Include="assembly_utils">
+      <HintPath Condition="Exists('$(TempDir)assembly_utils.public.dll')">$(TempDir)assembly_utils.public.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\assembly_utils.public.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Security">
+      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\Mono.Security.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\Mono.Security.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.ImageConversionModule.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.JSONSerializeModule.dll</HintPath>
+      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.JSONSerializeModule.dll</HintPath>
+    </Reference>
+    <Reference Include="WebsocketSharp">
+      <HintPath>..\libs\websocket-sharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+</Project>
+
+
+
+================================================
+FILE: WebMap/Patches/StringExtensionMethods_Patch.cs
+================================================
+using HarmonyLib;
+using System.Collections.Generic;
+
+namespace WebMap.Patches
+{
+
+    [HarmonyPatch]
+    internal class StringExtensionMethods_Patch
+    {
+        internal static Dictionary<int, string> stablehashNames = new Dictionary<int, string>();
+        internal static Dictionary<int, string> stablehashNamesAnim = new Dictionary<int, string>();
+        internal static Dictionary<string, int> stablehashLookup = new Dictionary<string, int>();
+        internal static Dictionary<string, int> stablehashLookupAnim = new Dictionary<string, int>();
+
+        [HarmonyPatch(typeof(StringExtensionMethods), "GetStableHashCode")]
+        [HarmonyPrefix]
+        public static bool GetStableHashCode(string str, ref int __result)
+        {
+            if (stablehashLookup.TryGetValue(str, out __result))
+            {
+                return false;
+            }
+
+            /////////////////////////////////////////////////////////////////
+            /// COPY PASTA THE ORIGINAL, ReversePatch wasn't working, 
+            /// cant be bothered to figure out why
+            int num = 5381;
+            int num2 = num;
+            for (int i = 0; i < str.Length && str[i] != 0; i += 2)
+            {
+                num = ((num << 5) + num) ^ str[i];
+                if (i == str.Length - 1 || str[i + 1] == '\0')
+                {
+                    break;
+                }
+                num2 = ((num2 << 5) + num2) ^ str[i + 1];
+            }
+            __result = num + num2 * 1566083941;
+            /////////////////////////////////////////////////////////////////
+
+            stablehashNames[__result] = str;
+            stablehashLookup[str] = __result;
+
+            if (WebMapConfig.DEBUG)
+            {
+                ZLog.Log($"First GetStableHashCode: {str} -> {__result}");
+            }
+
+            return false;
+        }
+
+        [HarmonyPatch(typeof(ZSyncAnimation), "GetHash")]
+        [HarmonyPrefix]
+        public static void GetAnimHash(string name, ref int __result, ref bool __runOriginal)
+        {
+            if (stablehashLookupAnim.TryGetValue(name, out __result))
+            {
+                __runOriginal = false;
+            }
+            else
+            {
+                __runOriginal = true;
+            }
+        }
+
+        [HarmonyPatch(typeof(ZSyncAnimation), "GetHash")]
+        [HarmonyPostfix]
+        public static void AddAnimHash(string name, ref int __result, ref bool __runOriginal)
+        {
+            if (__runOriginal)
+            {
+                stablehashNamesAnim[__result] = name;
+                stablehashLookupAnim[name] = __result;
+
+                if (WebMapConfig.DEBUG)
+                {
+                    ZLog.Log($"First GetAnimHash: {name} -> {__result}");
+                }
+            }
+        }
+
+        public static string GetStableHashName(int code)
+        {
+            string str;
+            if (stablehashNames.TryGetValue(code, out str))
+            {
+                return str;
+            }
+
+            if (stablehashNamesAnim.TryGetValue(code - 438569, out str))
+            {
+                return str + $" (A)";
+            }
+
+            return code.ToString();
+        }
+    }
+}
+
+
+================================================
+FILE: WebMap/Patches/ZroutedRpc_Patch.cs
+================================================
+using HarmonyLib;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection.Emit;
+using static ZRoutedRpc;
+
+namespace WebMap.Patches
+{
+    [HarmonyPatch]
+    internal class ZRoutedRpc_Patch
+    {
+        private static string[] ignoreRpc = { "DestroyZDO", "SetEvent", "OnTargeted", "Step" };
+
+        [HarmonyPatch(typeof(ZRoutedRpc), "InvokeRoutedRPC", new Type[] { typeof(long), typeof(ZDOID), typeof(string), typeof(object[]) })]
+        [HarmonyPrefix]
+        private static void InvokeRoutedRPC(ref ZRoutedRpc __instance, ref long targetPeerID, ZDOID targetZDO, string methodName, params object[] parameters)
+        {
+            if (WebMapConfig.DEBUG)
+                if (!Array.Exists(ignoreRpc, x => x == methodName))
+                {
+                    ZLog.Log("RoutedRPC Invoking: " + methodName + " " + methodName.GetStableHashCode());
+                }
+
+            if (WebMapConfig.TEST && methodName == "DiscoverLocationRespons")
+            {
+                ZLog.Log("TEST: Sending discovered location to everyone: " + methodName + " " + parameters[0] + " " + parameters[1] + " " + parameters[2] + " " + parameters[3]);
+                targetPeerID = ZRoutedRpc.Everybody;
+            }
+        }
+    }
+}
+
+
+
+================================================
+FILE: WebMap/web/drawdown.js
+================================================
+/**
+ * drawdown.js
+ * (c) Adam Leggett
+ */
+
+
+;function markdown(src) {
+
+    var rx_lt = /</g;
+    var rx_gt = />/g;
+    var rx_space = /\t|\r|\uf8ff/g;
+    var rx_escape = /\\([\\\|`*_{}\[\]()#+\-~])/g;
+    var rx_hr = /^([*\-=_] *){3,}$/gm;
+    var rx_blockquote = /\n *&gt; *([^]*?)(?=(\n|$){2})/g;
+    var rx_list = /\n( *)(?:[*\-+]|((\d+)|([a-z])|[A-Z])[.)]) +([^]*?)(?=(\n|$){2})/g;
+    var rx_listjoin = /<\/(ol|ul)>\n\n<\1>/g;
+    var rx_highlight = /(^|[^A-Za-z\d\\])(([*_])|(~)|(\^)|(--)|(\+\+)|`)(\2?)([^<]*?)\2\8(?!\2)(?=\W|_|$)/g;
+    var rx_code = /\n((```|~~~).*\n?([^]*?)\n?\2|((    .*?\n)+))/g;
+    var rx_link = /((!?)\[(.*?)\]\((.*?)( ".*")?\)|\\([\\`*_{}\[\]()#+\-.!~]))/g;
+    var rx_table = /\n(( *\|.*?\| *\n)+)/g;
+    var rx_thead = /^.*\n( *\|( *\:?-+\:?-+\:? *\|)* *\n|)/;
+    var rx_row = /.*\n/g;
+    var rx_cell = /\||(.*?[^\\])\|/g;
+    var rx_heading = /(?=^|>|\n)([>\s]*?)(#{1,6}) (.*?)( #*)? *(?=\n|$)/g;
+    var rx_para = /(?=^|>|\n)\s*\n+([^<]+?)\n+\s*(?=\n|<|$)/g;
+    var rx_stash = /-\d+\uf8ff/g;
+
+    function replace(rex, fn) {
+        src = src.replace(rex, fn);
+    }
+
+    function element(tag, content) {
+        return '<' + tag + '>' + content + '</' + tag + '>';
+    }
+
+    function blockquote(src) {
+        return src.replace(rx_blockquote, function(all, content) {
+            return element('blockquote', blockquote(highlight(content.replace(/^ *&gt; */gm, ''))));
+        });
+    }
+
+    function list(src) {
+        return src.replace(rx_list, function(all, ind, ol, num, low, content) {
+            var entry = element('li', highlight(content.split(
+                RegExp('\n ?' + ind + '(?:(?:\\d+|[a-zA-Z])[.)]|[*\\-+]) +', 'g')).map(list).join('</li><li>')));
+
+            return '\n' + (ol
+                ? '<ol start="' + (num
+                    ? ol + '">'
+                    : parseInt(ol,36) - 9 + '" style="list-style-type:' + (low ? 'low' : 'upp') + 'er-alpha">') + entry + '</ol>'
+                : element('ul', entry));
+        });
+    }
+
+    function highlight(src) {
+        return src.replace(rx_highlight, function(all, _, p1, emp, sub, sup, small, big, p2, content) {
+            return _ + element(
+                  emp ? (p2 ? 'strong' : 'em')
+                : sub ? (p2 ? 's' : 'sub')
+                : sup ? 'sup'
+                : small ? 'small'
+                : big ? 'big'
+                : 'code',
+                highlight(content));
+        });
+    }
+
+    function unesc(str) {
+        return str.replace(rx_escape, '$1');
+    }
+
+    var stash = [];
+    var si = 0;
+
+    src = '\n' + src + '\n';
+
+    replace(rx_lt, '&lt;');
+    replace(rx_gt, '&gt;');
+    replace(rx_space, '  ');
+
+    // blockquote
+    src = blockquote(src);
+
+    // horizontal rule
+    replace(rx_hr, '<hr/>');
+
+    // list
+    src = list(src);
+    replace(rx_listjoin, '');
+
+    // code
+    replace(rx_code, function(all, p1, p2, p3, p4) {
+        stash[--si] = element('pre', element('code', p3||p4.replace(/^    /gm, '')));
+        return si + '\uf8ff';
+    });
+
+    // link or image
+    replace(rx_link, function(all, p1, p2, p3, p4, p5, p6) {
+        stash[--si] = p4
+            ? p2
+                ? '<img src="' + p4 + '" alt="' + p3 + '"/>'
+                : '<a href="' + p4 + '">' + unesc(highlight(p3)) + '</a>'
+            : p6;
+        return si + '\uf8ff';
+    });
+
+    // table
+    replace(rx_table, function(all, table) {
+        var sep = table.match(rx_thead)[1];
+        return '\n' + element('table',
+            table.replace(rx_row, function(row, ri) {
+                return row == sep ? '' : element('tr', row.replace(rx_cell, function(all, cell, ci) {
+                    return ci ? element(sep && !ri ? 'th' : 'td', unesc(highlight(cell || ''))) : ''
+                }))
+            })
+        )
+    });
+
+    // heading
+    replace(rx_heading, function(all, _, p1, p2) { return _ + element('h' + p1.length, unesc(highlight(p2))) });
+
+    // paragraph
+    replace(rx_para, function(all, content) { return element('p', unesc(highlight(content))) });
+
+    // stash
+    replace(rx_stash, function(all) { return stash[parseInt(all)] });
+
+    return src.trim();
+};
+
+
+
+================================================
+FILE: WebMap/web/index.html
+================================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Valheim WebMap</title>
+    <meta charset="utf-8">
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0'>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAKn0lEQVRIx01W529b1xV3+sVInTipR7yiSLYm9+Ne4hAtkRLFLW6KQ9xL3EvclERqcEgWZUuyTCmyJFu2HC9ZaZoiiZu2QNGBoB8KFAWComiBBPnUP6GXlJv24seLx/veOb+z7rn3FKLjPLrz0iCdoFPIXFab1+GYdDmDXncLrkmnNexzJyJBj93i97iCk97ApC8SCicTyXymUJyZX5yv1Sr1amV5Jl8IuO1joxwGAYa8fgGoPcEp8DNq1Ftbj5588vOdncN7jf3NzY/r9fXV25ubjd3Nxv2Nze3bdxrFuVomN5eYKgSCqUAoHY3nk6nZVLoI5kx2rlisLi3daWztPn/+6tnT5xa9FnXjgzcELBJ6tX7v8eHRSn0jPpULhae8k2HPZHTSN+V0Rowmr9niczrDLnfU5Ym5PXGrLTiudxtNHp8/AeB0hhzOIIBu3Gw02WLx7GZjp1ypc1lUePu5JoFOqVi+tbG9vV+YXozF8sFgOp2ZK8xWXd6YdtxuMtpd9smJCa8/kPIHMqFIweWN+wOAO2C1gXWnbtyqG7fpDQ69wa4bt1htnlg8HYun5DIp8vrFJoFqTBYKxbe3H6Uzi+lMebGyXq6uOV2BhN/9YGnqD4flz9ZSEY8vFpuORmaz2Uoms1CprrrcgYTXengruVtO1OK2CY0aOKE3OG02n8Pu1xsm1GotFtaOaD93anCAKRAIl2p3l5a27m0drt19cGt1a8LsSluEv62P/2UvtBYQTPn9xeJSIb9Uq24s1dbX1rcsFtt2XPSPx75vdsM1J7eQiKUzJYczotO5vN6YSqVVKNU0PBJE6VQ/lUShUHP5xd39o537L6rVxp313UgsK+cxIwPvLsrbDP1tEZuhVltbv7vXaDzc3NxdvX3XatAdFYR/25AnhR+pmb2pRDqeKERi097JlMsdV6vHebxhGgHT9IBGJpJI5Jli9eP7zxcWNgv5+srKTmJqRi4S2tmXS5LLroErdimnVr7V2H64t/dk5/5BuXLLoVd8VuD+vjo6TjzjUg75/VGDwRWO5GZLy4BGJJZDEITu62zmABBgICiXn79z58FcaR0QLC5szs4uC0alJk5PQXAhL2nXMbpKuXxja//Bw6f7+0+mZxZcZsPz7PCTMFWC+mncbQmH0xar3+4IJVPFmdmqRCLv7e2Fd7e3ypROQSKR2Wzx2fMv1u48qFbuzZfWy4sbcrlBP0xKD727pOk0UC5mg77Gvb3Hj1/u7T/J5Usbacv3L6KHOZkMdzGfiPn9SZstEI3lpmfK2ey8VKbs6+tDdH/UJOgnY8lkSiAYO/70Ny9fvt5qfLJa362v7JhMbiX/ZnTgnWVNh41+flInnc6VtxoPd3YO8vni0cLEd8+CB2mRjtWdz+TAbrBYvYHgFEheJJYXSxRNgq62JgEFgnG5PJvd/eLl6+PjX7969frps1/s7j8NRTIc5oCN/v6i5IKXec7Ew0d8U/WVRrV2OxoIflXTf3ecqlhoZj6hVCoHw0m7w+d0BV2uENgi7IGbsL4+VE/LAxz8Osj4+Ljp8PDT4+NfHb/68uXLX97fe7KwuCIRq1T9XdP89yKDF+XEyyGXb23943Ak5dDIvlnT/vMoHeB3B43SSrUeiWZOVDudfofDx2INIOBwTC/IwblTqK7LnAG2RjO+t/f01fFXR6++eHn0+cGjF42tB25PSDnMvj2BOIiwpOgzIbv59p27ExZXSD307Y7+T3ctBtqVbMhTmqsFQ0mg2m73uZw+u93D4QxisVior6NJgLh+kUGnypUasIO2tw8fH746OHi+urq1sb7rD8Tl/JtbfvrjKGMMfdqtFmbT07Ixzax18O/b6mdTN5Wky7lEJJMt+vxxo9Gh01oMepvZ7OLxRqhUKhZ+o0XQcZ5GhERi2dx8bef+o929w5WVzdmZ2vLyhscbGWSzPewLJcH7ZsoZKbnDYXZyecKKi/evfcOyGathdBbSWb8/bjA4ZVK9Xm/X6awmo1MgkDAYDAIG1swB2M1kCCaRjjmdk3NzlWqtvrC4VCxWFhaXQdsaHuab2O1lwdns6CUh5pyULxqg9386r/zhs0RI0GkVUkuzpXA4EYok7XYQIr/F4vV6oyBcUqmM1U9DdX5wCuxmHKxDLJbo9aZ0Op/PTU9PF4vFhdnZhVQmPzIikjNgpZEzq+oPZZh3xgR8g3jwj3XF7+oKDfG9hFOTyxXC4WguN5NM5WLxTL5QmpuvLizW9AajQCDAI240Q4TpuSYUCJUqjd8XjEbiiUQqkUgGApFAIMrlCjkERJLz9l3dZSPh9BiXFjeOfLtrfprhSjDvTsf9oVDUarF7PL5QKJJO54rF+Up1eWl5xWZzSMcULBoREJyDej8UgfahUGk1Wv24wWy2AhmNSq9S6rlcAYMAhdjv3JKe9fefFpJ7yh7BD0eRTT9zjHilmEsDRQqFCkBvMHm9vngskUpmkskMUKLVGbgcdjNEeHiHfEypVGqUSpVIKBnli8QiGX9EJJUohEIJg0p2sS5UBD9N3jwjxV/czyr//fVcTo00cjGZVEoikdHpTCaTPToqUCiUBoPRYrZYzVaVSq1QaJh02gnBdbVaNyoQ8bgjnAHuAHuITOrncIaEIhEQo5ApNl5fWXI+yTsvh858uWL+/vW8jXXJJmUFfH4Gg43DEggEUn8/gz86KhKJZDLZ2Jh8cHCISCRBKHiziojITp3OwOPxaTQmlUKHMHgCnkSj9fP5o3w+HwjrhomfzwytWRAK6O0/74f/+klcTXjPbRhTq7RUCg2JQKFRoCODnkYdvDkEpIB2HBYPg8MRvZ1NAhK62zxhHx0VYrF4NApqWoQnAosGB7kjI3wSmcImwNZ0bSuyny3Krv7w+fRBTiTFnffYJoAIhUyF0BAKiQYATZPBYAIA+8B5AIPB4F3tLQ9QnXabWyyWNZ2CcAQCkUqjUmk0Gp3OZrPBeYfq65qRtK2KT39dYH5Z02lJ76tYvQ6bFTSx/v5+EpEMobFAlkKhgLMLwjTbMw6HAwSIrg+bVYTtbdOotAKBmEyigO/Aa6D0BE0SWn93V5eDebHMe2tdc2lKeJ3X9ZZRyDDoDdwhHnAU2AJEqBQqiUTCoCHAB+SBIB6HR3Zea+4DdPdVNovJZrHBO/ApCCWlhZMHGoXW09XDh67khs+6GGeFfT/hw89oREMSiZTL5QIPgKsnHFgIB1SzWCxgF294BJQ+6HdNAuSND6hkQrN7EAhYCAvyQz7xojVoVBoahSZhEFYhSTOI1gxhx3h0uUwGamyAPUAmkfE4AhABIBFJwGo8ngDc1urGjQYTFtYiAMAhuqlUCpFEBHpPtIO5JUAAKpgMUOlMsVis0+m0Wh3oMyA4IAg4LNBHILWiCkyhNKNEBqDTaKYJs0Q4Ckx/QwBuYRC8C4lAgOw3w9n0mtoKK5lIJAKLmAwWmz3A4dw8Aas1OBwOqAJAT/vvoIOU0WggGRAGQvW0v7n8/ghUdxsaCcNg0OC4OLGOQGwOINCagFeAjwTWQZE0Y0HAY98MqDVBaDQaWAnr7YHduAb/8Xb9/wBOoXvaUL3tqN7rKFg3Ct77P8C6kX1diJ4OeFcbvPMa7MYV+I0riM6roBbB3xauwpuLlxGtW+kJ/gPjeCbC4j/mGAAAAABJRU5ErkJggg==">
+    <link href="style.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+    <div data-id="map" class="map">
+        <canvas data-id="canvas"></canvas>
+        <svg class="mapBorder" data-id="mapBorder" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
+            <circle data-id="mapBorderCircle" cx="500" cy="500" r="500" fill="none"
+                    stroke="#55F" stroke-opacity="50%" stroke-width="2" />
+        </svg>
+    </div>
+    <div data-id="coords" class="mapText coords"></div>
+    <div data-id="menuBtn" class="menu-btn" role="button">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+    </div>
+    <div data-id="menu" class="menu">
+        <label class="inputRow">
+            <input type="checkbox" data-id="hidePlayerList">
+            Hide Player List
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" data-id="hideMessageList">
+            Hide Messages
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" class="hideIconTypeCheckbox" data-id="hideAll" data-hide="all">
+            Hide all pins
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" class="hideIconTypeCheckbox" data-hide="dot">
+            Hide all
+            <div class="mapIcon dot menuMapIcon"></div>
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" class="hideIconTypeCheckbox" data-hide="house">
+            Hide all
+            <div class="mapIcon house menuMapIcon"></div>
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" class="hideIconTypeCheckbox" data-hide="fire">
+            Hide all
+            <div class="mapIcon fire menuMapIcon"></div>
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" class="hideIconTypeCheckbox" data-hide="cave">
+            Hide all
+            <div class="mapIcon cave menuMapIcon"></div>
+        </label>
+        <label class="inputRow">
+            <input type="checkbox" class="hideIconTypeCheckbox" data-hide="mine">
+            Hide all
+            <div class="mapIcon mine menuMapIcon"></div>
+        </label>
+    </div>
+    <table id="messages" data-id="messageList"></table>
+    <div class="playerListContainer" data-id="playerListContainer">
+        <div class="playerListTitle">Players</div>
+        <div data-id="playerList"></div>
+        <div class="playerListTut" data-id="playerListTut">Click player<br>to toggle follow.</div>
+    </div>
+    <div class="topMessage" data-id="topMessage"></div>
+    <script src="drawdown.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
+
+
+
+================================================
+FILE: WebMap/web/style.css
+================================================
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+    height: 100%;
+    font-family: sans-serif;
+    touch-action: none;
+}
+
+body {
+    background-image: url('tile.webp');
+    background-repeat: repeat;
+}
+
+canvas {
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    width: 100%;
+    height: 100%;
+    clip-path: circle(42.725% at center);
+}
+
+@keyframes pulse {
+    from {
+        transform: translate(-50%, -50%) scale(1);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.5);
+    }
+
+    to {
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+
+.map {
+    position: fixed;
+}
+
+.mapBorder {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+body .map.zooming {
+    transition: none;
+}
+
+.menu-btn {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    padding: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 20;
+}
+
+    .menu-btn:hover .bar {
+        background: #ccc;
+    }
+
+    .menu-btn .bar {
+        background: #fff;
+        width: 30px;
+        height: 3px;
+        margin-bottom: 4px;
+        border-radius: 10px 0;
+        box-shadow: 0px 0px 3px 1.5px #000;
+        transition: background 0.1s ease-in-out;
+    }
+
+        .menu-btn .bar:last-child {
+            margin-bottom: 0;
+        }
+
+.menu {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 16px 10px 12px;
+    position: fixed;
+    top: 46px;
+    /* left: 14px; */
+    left: -180px;
+    font-size: 14px;
+    transition: left 0.3s ease-in-out;
+    z-index: 20;
+}
+
+    .menu.menuOpen {
+        left: 0px;
+    }
+
+    .menu label {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .menu .inputRow {
+        display: flex;
+        align-items: center;
+        height: 26px;
+    }
+
+.inputRow input {
+    margin-right: 8px;
+}
+
+.mapText {
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    text-shadow: 0 0 6px #000, 0 0 6px #000, 0 0 3px #000;
+    user-select: none;
+    pointer-events: none;
+}
+
+#messages {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px;
+    position: fixed;
+    left: 0px;
+    bottom: 0px;
+    z-index: 10;
+    font-size: 12px;
+    transition: left 0.3s ease-in-out;
+}
+
+#messages .datetime {
+    color: gray;
+    text-align: right;
+}
+
+#messages .date {
+    display: none;
+}
+
+#messages .name {
+    color: darkorange;
+}
+
+#messages .name::after {
+    color: white;
+    content: ":";
+}
+
+#messages .type2 .text {
+    color: gold;
+    text-transform: uppercase;
+}
+
+#messages .server .name {
+    color: deepskyblue;
+}
+
+#messages td > p {
+    display: contents;
+}
+
+.coords {
+    position: fixed;
+    right: 8px;
+    bottom: 6px;
+    z-index: 10;
+    font-size: 10px;
+}
+
+.mapIcon {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    background-image: url('mapIcons.png');
+    background-size: 192px;
+    transform: translate(-50%, -50%);
+}
+
+    .mapIcon .center {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, 0);
+    }
+
+    .mapIcon .text {
+        bottom: -11px;
+    }
+
+    .mapIcon.player {
+        background-position: 0 0;
+        filter: hue-rotate(240deg);
+    }
+
+    .mapIcon.fire {
+        background-position: -32px 0;
+    }
+
+    .mapIcon.dot {
+        background-position: -64px 0;
+    }
+
+    .mapIcon.mine {
+        background-position: -96px 0;
+    }
+
+    .mapIcon.house {
+        background-position: -128px 0;
+    }
+
+    .mapIcon.cave {
+        background-position: 0 -32px;
+    }
+
+    .mapIcon.boss {
+        background-position: -32px -32px;
+    }
+
+    .mapIcon.start {
+        background-position: -64px -32px;
+    }
+
+    .mapIcon.ping {
+        background-position: -96px -32px;
+        animation: pulse 1.2s ease-in-out infinite;
+    }
+    .mapIcon.dead {
+        background-position: -128px -32px;
+    }
+    .mapIcon.pvp {
+        filter: hue-rotate(0deg) !important;
+    }
+.menuMapIcon {
+    position: static;
+    transform: scale(0.7);
+}
+
+.hpBar {
+    border: 1px solid #f55;
+    height: 9px;
+    width: 100%;
+    position: relative;
+}
+
+.hp {
+    width: 100%;
+    height: 100%;
+    background: #f55;
+    transition: width 0.5s linear;
+}
+
+.hpText {
+    position: absolute;
+    font-size: 10px;
+    line-height: 8px;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, 0);
+    white-space: nowrap;
+}
+
+.playerListContainer {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 0;
+    position: fixed;
+    top: 0px;
+    right: 0px;
+    font-size: 12px;
+    transition: right 0.3s ease-in-out;
+    z-index: 20;
+    min-width: 100px;
+    text-align: center;
+}
+
+.playerListTitle {
+    font-size: 16px;
+    margin-bottom: 6px;
+}
+
+.playerListEntry {
+    padding: 0 16px;
+    cursor: pointer;
+    padding: 3px 16px;
+}
+
+    .playerListEntry.selected {
+        background: rgba(135, 134, 202, 0.75);
+    }
+
+.playerListTut {
+    font-size: 12px;
+    margin-top: 16px;
+}
+
+.topMessage {
+    position: fixed;
+    top: 6px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    color: #fff;
+    text-shadow: 0 0 6px #000, 0 0 6px #000, 0 0 3px #000;
+    font-size: 24px;
+    text-align: center;
+}
+
+
+
+================================================
+FILE: WebMap/web/tile.webp
+================================================
+[Non-text file]
+
+
+================================================
+FILE: WebMap/web-src/constants.js
+================================================
+const constants = {
+    CANVAS_WIDTH: 2048,
+    CANVAS_HEIGHT: 2048,
+    PIXEL_SIZE: 12,
+    EXPLORE_RADIUS: 100,
+    DEFAULT_ZOOM: 200,
+    ALWAYS_MAP: false,
+    ALWAYS_VISIBLE: false
+};
+
+constants.COORD_OFFSET = constants.CANVAS_WIDTH / 2;
+
+export default constants;
+
+
+
+================================================
+FILE: WebMap/web-src/index.js
+================================================
+import constants from "./constants";
+import websocket from "./websocket";
+import map from "./map";
+import players from "./players";
+import ui, { createUi } from "./ui";
+
+const mapImage = document.createElement('img');
+const fogImage = document.createElement('img');
+
+const fetchMap = () => new Promise((res) => {
+    fetch('map').then(res => res.blob()).then((mapBlob) => {
+        mapImage.onload = res;
+        mapImage.src = URL.createObjectURL(mapBlob);
+    });
+});
+
+const fetchFog = () => new Promise((res) => {
+    fogImage.onload = res;
+    fogImage.src = 'fog';
+});
+
+const createStyleSheet = (styles = '') => {
+    const style = document.createElement("style");
+    style.appendChild(document.createTextNode(styles));
+    document.head.appendChild(style);
+    return style.sheet;
+};
+
+const parseVector3 = str => {
+    const strParts = str.split(',');
+    return {
+        x: parseFloat(strParts[0]),
+        y: parseFloat(strParts[1]),
+        z: parseFloat(strParts[2]),
+    };
+};
+
+const fetchConfig = fetch('config').then(res => res.json()).then(config => {
+    constants.CANVAS_WIDTH = config.texture_size || 2048;
+    constants.CANVAS_HEIGHT = config.texture_size || 2048;
+    constants.PIXEL_SIZE = config.pixel_size || 12;
+    constants.EXPLORE_RADIUS = config.explore_radius || 100;
+    constants.UPDATE_INTERVAL = config.update_interval || 0.5;
+    constants.WORLD_NAME = config.world_name;
+    constants.WORLD_START_POSITION = parseVector3(config.world_start_pos);
+    constants.DEFAULT_ZOOM = config.default_zoom || 200;
+    constants.MAX_MESSAGES = config.max_messages || 100;
+    constants.ALWAYS_MAP = config.always_map;
+    constants.ALWAYS_VISIBLE = config.always_visible;
+    document.title = `Valheim WebMap - ${constants.WORLD_NAME}`;
+    createStyleSheet(`
+		.mapIcon.player {
+			transition: top ${constants.UPDATE_INTERVAL}s linear, left ${constants.UPDATE_INTERVAL}s linear;
+		}
+		.map.smooth {
+			transition: top ${constants.UPDATE_INTERVAL}s linear, left ${constants.UPDATE_INTERVAL}s linear;
+		}
+	`);
+});
+
+const setup = async () => {
+    await Promise.all([
+        fetchMap(),
+        fetchFog(),
+        fetchConfig
+    ]);
+
+    map.init({
+        mapImage,
+        fogImage,
+        zoom: constants.DEFAULT_ZOOM
+    });
+
+    map.addIcon({
+        type: 'start',
+        x: constants.WORLD_START_POSITION.x,
+        z: constants.WORLD_START_POSITION.z,
+        static: true
+    });
+
+    const pings = {};
+
+    websocket.addActionListener('ping', (ping) => {
+        let mapIcon = pings[ping.playerId];
+        if (!mapIcon) {
+            mapIcon = { ...ping };
+            mapIcon.type = 'ping';
+            mapIcon.text = ping.name;
+            map.addIcon(mapIcon, false);
+            pings[ping.playerId] = mapIcon;
+        }
+        mapIcon.x = ping.x;
+        mapIcon.z = ping.z;
+        map.updateIcons();
+
+        clearTimeout(mapIcon.timeoutId);
+        mapIcon.timeoutId = setTimeout(() => {
+            delete pings[ping.playerId];
+            map.removeIcon(mapIcon);
+        }, 8000);
+    });
+
+    fetch('pins').then(res => res.text()).then(text => {
+        const lines = text.split('\n');
+        lines.forEach(line => {
+            const lineParts = line.split(',');
+            if (lineParts.length > 5) {
+                const pin = {
+                    id: lineParts[1],
+                    uid: lineParts[0],
+                    type: lineParts[2],
+                    name: lineParts[3],
+                    x: lineParts[4],
+                    z: lineParts[5],
+                    text: lineParts[6],
+                    static: true
+                };
+                map.addIcon(pin, false);
+            }
+        });
+        map.updateIcons();
+    });
+
+    websocket.addActionListener('pin', (pin) => {
+        map.addIcon(pin);
+    });
+
+    websocket.addActionListener('rmpin', (pinid) => {
+        map.removeIconById(pinid);
+    });
+
+    const tempTable = document.createElement('table');
+    websocket.addActionListener('messages', (messages) => {
+        messages.forEach((message) => {
+            const messageEntry = createUi(`
+		<tr class="message">
+		    <td class="datetime">
+		        <span class="date" data-id="date"></span>
+		        <span class="time" data-id="time"></span>
+		    </td>
+		    <td class="name" data-id="name"></td>
+		    <td class="text" data-id="message"></td>
+		</tr>
+            `, tempTable);
+
+            var messageDate = new Date(message.ts);
+            messageEntry.ui.date.textContent = messageDate.toLocaleDateString();
+            messageEntry.ui.time.textContent = messageDate.toLocaleTimeString();
+            messageEntry.ui.name.textContent = message.name;
+            messageEntry.ui.message. innerHTML = markdown(message.message);
+            if (message.name == "Server") {
+                messageEntry.el.firstChild.classList.add("server");
+            }
+            messageEntry.el.firstChild.classList.add("type" + message.type);
+            ui.messageList.appendChild(messageEntry.el.firstChild);
+        });
+        while (document.getElementById('messages').childElementCount > constants.MAX_MESSAGES) {
+            document.getElementById('messages').childNodes[0].remove();
+        }
+    });
+
+    fetch('messages').then(resp => resp.json()).then(messages => {
+        if (messages.length > 0) {
+            websocket.getActionListeners('messages').forEach(func => {
+                func(messages);
+            });
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        map.update();
+    });
+
+    ui.menuBtn.addEventListener('click', () => {
+        ui.menu.classList.toggle('menuOpen');
+    });
+
+    const closeMenu = (e) => {
+        const inMenu = e.target.closest('.menu');
+        const inMenuBtn = e.target.closest('.menu-btn');
+        if (!inMenu && !inMenuBtn) {
+            ui.menu.classList.remove('menuOpen');
+        }
+    };
+    window.addEventListener('mousedown', closeMenu);
+    window.addEventListener('touchstart', closeMenu);
+
+    const hideCheckboxes = ui.menu.querySelectorAll('.hideIconTypeCheckbox');
+    hideCheckboxes.forEach(el => {
+        el.addEventListener('change', () => {
+            map.setIconTypeHidden(el.dataset.hide, el.checked || ui.hideAll.checked);
+            if (el.dataset.hide === 'all') {
+                hideCheckboxes.forEach(el2 => {
+                    map.setIconTypeHidden(el2.dataset.hide, el.checked || el2.checked);
+                });
+            }
+            map.updateIcons();
+        });
+    });
+
+    ui.hideMessageList.addEventListener('change', () => {
+        if (ui.hideMessageList.checked) {
+            ui.messageList.style.left = -ui.messageList.offsetWidth + 'px';
+        } else {
+            ui.messageList.style.left = 0;
+        }
+    });
+
+    ui.hidePlayerList.addEventListener('change', () => {
+        if (ui.hidePlayerList.checked) {
+            ui.playerListContainer.style.right = -ui.playerListContainer.offsetWidth + 'px';
+        } else {
+            ui.playerListContainer.style.right = 0;
+        }
+    });
+
+    players.init();
+    websocket.init();
+};
+
+setup();
+
+
+
+================================================
+FILE: WebMap/web-src/map.js
+================================================
+import ui from './ui';
+import constants from "./constants";
+import onPointers from "./onPointers";
+
+const { canvas, map, mapBorder, mapBorderCircle } = ui;
+
+let width = constants.CANVAS_WIDTH;
+let height = constants.CANVAS_HEIGHT;
+let exploreRadius = constants.EXPLORE_RADIUS;
+let pixelSize = constants.PIXEL_SIZE;
+let coordOffset = constants.COORD_OFFSET;
+
+// preload map icons.
+const mapIconImage = document.createElement('img');
+mapIconImage.src = 'mapIcons.png';
+
+const ctx = canvas.getContext('2d');
+
+let mapImage;
+let fogImage;
+const fogCanvas = document.createElement('canvas');
+const fogCanvasCtx = fogCanvas.getContext('2d');
+
+let currentZoom = 100;
+
+const mapIcons = [];
+const hiddenIcons = {};
+let followIcon;
+
+const createIconEl = (iconObj) => {
+    const iconEl = document.createElement('div');
+    iconEl.id = iconObj.id;
+    iconEl.className = `mapText mapIcon ${iconObj.type}`;
+    if (iconObj.zIndex) {
+        iconEl.style.zIndex = iconObj.zIndex;
+    }
+    const iconTextEl = document.createElement('div');
+    iconTextEl.className = 'center text';
+    iconTextEl.textContent = iconObj.text;
+    iconEl.appendChild(iconTextEl);
+    if (iconObj.node) {
+        iconEl.appendChild(iconObj.node);
+    }
+    return iconEl;
+};
+
+const centerOnIcon = (iconObj) => {
+    const rect = iconObj.el.getBoundingClientRect();
+    const deltaX = window.innerWidth / 2 - rect.left;
+    const deltaY = window.innerHeight / 2 - rect.top;
+    if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+        map.style.left = deltaX + map.offsetLeft + 'px';
+        map.style.top = deltaY + map.offsetTop + 'px';
+    }
+};
+
+const setFollowIcon = (iconObj) => {
+    followIcon = iconObj;
+    if (followIcon) {
+        centerOnIcon(followIcon);
+    }
+};
+
+let pendingIconUpdate = false;
+const updateIcons = () => {
+    clearTimeout(performUpdateIcons);
+    pendingIconUpdate = true;
+    setTimeout(performUpdateIcons, 250);
+};
+
+const performUpdateIcons = () => {
+    pendingIconUpdate = false;
+    mapIcons.forEach(iconObj => {
+        let firstRender = false;
+        if (!iconObj.el) {
+            firstRender = true;
+            iconObj.el = createIconEl(iconObj);
+            map.appendChild(iconObj.el);
+        }
+
+        const isIconTypeHidden = (iconObj.type in hiddenIcons && hiddenIcons[iconObj.type]);
+        iconObj.el.style.display = (isIconTypeHidden || iconObj.hidden) ? 'none' : 'block';
+
+        if (iconObj.flags) {
+            Object.keys(iconObj.flags).forEach(key => {
+                if (iconObj.flags[key]) {
+                    iconObj.el.classList.add(key);
+                } else {
+                    iconObj.el.classList.remove(key);
+                }
+            });
+        }
+
+        if (!firstRender && iconObj.static) {
+            return;
+        }
+
+        const imgX = iconObj.x / pixelSize + coordOffset;
+        const imgY = height - (iconObj.z / pixelSize + coordOffset);
+
+        iconObj.el.style.left = 100 * imgX / width + '%';
+        iconObj.el.style.top = 100 * imgY / height + '%';
+    });
+
+    if (followIcon) {
+        centerOnIcon(followIcon);
+    }
+};
+
+window.addEventListener('mousemove', e => {
+    const canvasOffsetScale = map.offsetWidth / width;
+    const x = pixelSize * (-coordOffset + (e.clientX - map.offsetLeft) / canvasOffsetScale);
+    const y = pixelSize * (height - coordOffset + (map.offsetTop - e.clientY) / canvasOffsetScale);
+    ui.coords.textContent = `${x.toFixed(2)} , ${y.toFixed(2)}`;
+});
+
+const addIcon = (iconObj, update = true) => {
+    if (!iconObj.id) {
+        iconObj.id = `id_${Date.now()}_${Math.random()}`;
+    }
+
+    mapIcons.push(iconObj);
+    if (update) {
+        updateIcons();
+    }
+};
+
+const hideIcon = (iconObj) => {
+    const idx = mapIcons.indexOf(iconObj);
+    iconObj.hidden = true;
+    if (idx > -1 && iconObj.el) {
+        iconObj.el.style.display = 'none';
+    }
+};
+
+const hideIconById = (iconId) => {
+    const iconObj = mapIcons.find(icon => icon.id === iconId);
+    if (iconObj) {
+        hideIcon(iconObj);
+    }
+};
+
+const showIcon = (iconObj) => {
+    const idx = mapIcons.indexOf(iconObj);
+    iconObj.hidden = false;
+    if (idx > -1 && iconObj.el) {
+        iconObj.el.style.display = 'block';
+    }
+};
+
+const showIconById = (iconId) => {
+    const iconObj = mapIcons.find(icon => icon.id === iconId);
+    if (iconObj) {
+        showIcon(iconObj);
+    }
+};
+
+const removeIcon = (iconObj) => {
+    const idx = mapIcons.indexOf(iconObj);
+    if (idx > -1) {
+        mapIcons.splice(idx, 1);
+        if (iconObj.el) {
+            iconObj.el.remove();
+            iconObj.el = undefined;
+        }
+    }
+};
+
+const removeIconById = (iconId) => {
+    const iconToRemove = mapIcons.find(icon => icon.id === iconId);
+    if (iconToRemove) {
+        removeIcon(iconToRemove);
+    }
+};
+
+const setIconTypeHidden = (type, isHidden) => {
+    hiddenIcons[type] = isHidden;
+};
+
+const redrawMap = () => {
+    ctx.clearRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(mapImage, 0, 0);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(fogCanvas, 0, 0);
+
+    updateIcons();
+};
+
+const explore = (mapX, mapZ) => {
+    const radius = exploreRadius / pixelSize;
+    const x = mapX / pixelSize + coordOffset;
+    const y = height - (mapZ / pixelSize + coordOffset);
+    fogCanvasCtx.beginPath();
+    fogCanvasCtx.arc(x, y, radius, 0, 2 * Math.PI);
+    fogCanvasCtx.fill();
+    redrawMap();
+};
+
+const setZoom = function (zoomP, zoomTowardsX, zoomTowardsY) {
+    if (zoomTowardsX === undefined) {
+        zoomTowardsX = window.innerWidth / 2;
+        zoomTowardsY = window.innerHeight / 2;
+    }
+    const oldZoom = currentZoom;
+    const minZoom = 50;
+    const maxZoom = 8000 * devicePixelRatio;
+    zoomP = Math.min(Math.max(Math.round(zoomP), minZoom), maxZoom);
+    currentZoom = zoomP;
+    map.style.width = `${zoomP}%`;
+    map.style.height = map.offsetWidth + 'px';
+
+    const zoomRatio = currentZoom / oldZoom;
+    map.style.left = zoomRatio * (map.offsetLeft - zoomTowardsX) + zoomTowardsX + 'px';
+    map.style.top = zoomRatio * (map.offsetTop - zoomTowardsY) + zoomTowardsY + 'px';
+
+    updateIcons();
+};
+
+let zoomingClassTimeout;
+const removeZoomingClass = () => {
+    clearTimeout(zoomingClassTimeout);
+    zoomingClassTimeout = setTimeout(() => {
+        map.classList.remove('zooming');
+    }, 100);
+};
+
+const init = (options) => {
+    width = constants.CANVAS_WIDTH;
+    height = constants.CANVAS_HEIGHT;
+    exploreRadius = constants.EXPLORE_RADIUS;
+    pixelSize = constants.PIXEL_SIZE;
+    coordOffset = constants.COORD_OFFSET;
+
+    canvas.width = width;
+    canvas.height = height;
+    map.style.width = '100%';
+    map.style.height = map.offsetWidth + 'px';
+    map.style.left = (window.innerWidth - map.offsetWidth) / 2 + 'px';
+    map.style.top = (window.innerHeight - map.offsetHeight) / 2 + 'px';
+    fogCanvas.width = width;
+    fogCanvas.height = height;
+    fogCanvasCtx.fillStyle = '#ffffff';
+
+    mapBorder.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    mapBorderCircle.setAttribute("cx", width / 2);
+    mapBorderCircle.setAttribute("cy", width / 2);
+    mapBorderCircle.setAttribute("r", width * 0.4275);
+
+    mapImage = options.mapImage;
+    fogImage = options.fogImage;
+
+    fogCanvasCtx.drawImage(fogImage, 0, 0);
+
+    redrawMap();
+
+    const zoomChange = (e, mult = 1) => {
+        map.classList.add('zooming');
+        const oldZoom = currentZoom;
+        const zoomAmount = Math.max(Math.floor(oldZoom / 5), 1) * mult;
+        const scrollAmt = e.deltaY === 0 ? e.deltaX : e.deltaY;
+        if (scrollAmt > 0) {
+            // zoom out.
+            setZoom(oldZoom - zoomAmount, e.clientX, e.clientY);
+        } else {
+            // zoom in.
+            setZoom(oldZoom + zoomAmount, e.clientX, e.clientY);
+        }
+        removeZoomingClass();
+    };
+
+    if (options.zoom) {
+        setZoom(options.zoom);
+    }
+
+    window.addEventListener('wheel', zoomChange);
+    window.addEventListener('resize', () => {
+        map.style.height = map.offsetWidth + 'px';
+    });
+
+    const canvasPreDragPos = {};
+    let isZooming = false;
+    let lastZoomDist;
+    onPointers(window, {
+        down: (pointers) => {
+            if (pointers.length === 1) {
+                canvasPreDragPos.x = map.offsetLeft;
+                canvasPreDragPos.y = map.offsetTop;
+            } else if (pointers.length === 2) {
+                isZooming = true;
+                lastZoomDist = undefined;
+            }
+        },
+        move: (pointers) => {
+            if (pointers.length === 1 && !isZooming && !followIcon) {
+                const e = pointers[0].event;
+                map.style.left = canvasPreDragPos.x + (e.clientX - pointers[0].downEvent.clientX) + 'px';
+                map.style.top = canvasPreDragPos.y + (e.clientY - pointers[0].downEvent.clientY) + 'px';
+
+                updateIcons();
+            } else if (pointers.length === 2) {
+                const x1 = pointers[0].event.clientX;
+                const y1 = pointers[0].event.clientY;
+                const x2 = pointers[1].event.clientX;
+                const y2 = pointers[1].event.clientY;
+                const diffX = x1 - x2;
+                const diffY = y1 - y2;
+                const dist = Math.sqrt(diffX * diffX + diffY * diffY);
+                if (lastZoomDist) {
+                    const diffDist = (lastZoomDist - dist) || -1;
+                    zoomChange({
+                        deltaY: diffDist,
+                        clientX: (x1 + x2) / 2,
+                        clientY: (y1 + y2) / 2
+                    }, 0.08);
+                }
+                lastZoomDist = dist;
+            }
+        },
+        up: (pointers) => {
+            if (pointers.length === 0) {
+                isZooming = false;
+            }
+        }
+    });
+};
+
+export default {
+    init,
+    addIcon,
+    removeIcon,
+    removeIconById,
+    hideIcon,
+    hideIconById,
+    showIcon,
+    showIconById,
+    setIconTypeHidden,
+    explore,
+    centerOnIcon,
+    setFollowIcon,
+    update: redrawMap,
+    updateIcons,
+    canvas
+};
+
+
+
+
+================================================
+FILE: WebMap/web-src/onPointers.js
+================================================
+const onPointers = (element, options) => {
+    const downPointers = new Map();
+    let downPointerArr = [];
+
+    const down = e => {
+        const newPointer = { downEvent: e, event: e };
+        downPointers.set(e.pointerId, newPointer);
+        downPointerArr.push(newPointer);
+        if (options.down) {
+            options.down(downPointerArr);
+        }
+    };
+
+    const move = e => {
+        const currentPointer = downPointers.get(e.pointerId);
+        if (currentPointer) {
+            currentPointer.event = e;
+            if (options.move) {
+                options.move(downPointerArr);
+            }
+        }
+    };
+
+    const up = e => {
+        downPointers.delete(e.pointerId);
+        downPointerArr = downPointerArr.filter(pointer => pointer.event.pointerId !== e.pointerId);
+        if (options.up) {
+            options.up(downPointerArr);
+        }
+    };
+
+    element.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+};
+
+export default onPointers;
+
+
+
+================================================
+FILE: WebMap/web-src/players.js
+================================================
+import ui, { createUi } from "./ui";
+import websocket from "./websocket";
+import map from "./map";
+import constants from "./constants";
+
+const playerMapIcons = {};
+let followingPlayer;
+
+const followPlayer = (playerMapIcon) => {
+    if (followingPlayer) {
+        followingPlayer.playerListEntry.el.classList.remove('selected');
+    }
+    if (playerMapIcon && playerMapIcon !== followingPlayer) {
+        followingPlayer = playerMapIcon;
+        followingPlayer.playerListEntry.el.classList.add('selected');
+        ui.map.classList.remove('smooth');
+        map.setFollowIcon(playerMapIcon);
+        ui.topMessage.textContent = `Following ${followingPlayer.name}`;
+        setTimeout(() => {
+            ui.map.classList.add('smooth');
+        }, 0);
+    } else {
+        followingPlayer = null;
+        map.setFollowIcon(null);
+        ui.map.classList.remove('smooth');
+        ui.topMessage.textContent = '';
+    }
+};
+
+const init = () => {
+    websocket.addActionListener('players', (players) => {
+        let currentPlayerIds = Object.keys(playerMapIcons);
+        let newPlayerIds = players.map(player => { return player.id });
+        currentPlayerIds.filter(id => !newPlayerIds.includes(id)).forEach((id) => {
+            if (playerMapIcons[id] === followingPlayer) {
+                followPlayer(null);
+            }
+            playerMapIcons[id].playerListEntry.el.remove();
+            map.removeIcon(playerMapIcons[id]);
+            delete playerMapIcons[id];
+        });
+
+        players.forEach((player) => {
+            let playerMapIcon = playerMapIcons[player.id];
+            if (!playerMapIcon) {
+                // new player
+                const playerListEntry = createUi(`
+                    <div class="playerListEntry">
+                        <div class="name" data-id="name"></div>
+                        <div class="details" data-id="details">
+                            <div class="hpBar" data-id="hpBar">
+                                <div class="hp" data-id="hp"></div>
+                                <div class="hpText" data-id="hpText"></div>
+                            </div>
+                        </div>
+                    </div>
+                `);
+                playerListEntry.ui.name.textContent = player.name;
+                playerMapIcon = {
+                    ...player,
+                    type: 'player',
+                    text: player.name,
+                    zIndex: 5,
+                    playerListEntry
+                };
+                map.addIcon(playerMapIcon, false);
+                if (player.hidden && !constants.ALWAYS_VISIBLE) {
+                    playerListEntry.ui.details.style.display = 'none';
+                }
+                playerMapIcons[player.id] = playerMapIcon;
+                playerListEntry.el.addEventListener('click', () => {
+                    if (!playerMapIcon.hidden) {
+                        if (ui.playerListTut) {
+                            ui.playerListTut.remove();
+                            ui.playerListTut = undefined;
+                        }
+                        followPlayer(playerMapIcon);
+                    }
+                });
+
+                ui.playerList.appendChild(playerListEntry.el);
+            }
+
+            if ((constants.ALWAYS_VISIBLE || !player.hidden) && playerMapIcon.hidden) {
+                // no longer hidden
+		        map.showIcon(playerMapIcon);
+                playerMapIcon.playerListEntry.ui.details.style.display = 'block';
+            } else if (!constants.ALWAYS_VISIBLE && (player.hidden && !playerMapIcon.hidden)) {
+                // becomming hidden
+                map.hideIcon(playerMapIcon);
+                playerMapIcon.playerListEntry.ui.details.style.display = 'none';
+                if (followingPlayer === playerMapIcon) {
+                    followPlayer(null);
+                }
+            }
+
+            playerMapIcon.lastUpdate = Date.now();
+            playerMapIcon.x = player.x;
+            playerMapIcon.z = player.z;
+            playerMapIcon.flags = player.flags;
+            console.log(player.flags);
+            console.log(playerMapIcon.flags);
+
+            playerMapIcon.playerListEntry.ui.hp.style.width = `${100 * Math.max(player.health / player.maxHealth, 0) }%`;
+            playerMapIcon.playerListEntry.ui.hpText.textContent = `${Math.round(Math.max(player.health, 0)) } / ${Math.round(player.maxHealth) }`;
+
+            if (!player.hidden || constants.ALWAYS_MAP || constants.ALWAYS_VISIBLE) {
+                map.explore(player.x, player.z);
+            }
+        });
+        map.updateIcons();
+    });
+};
+
+export default {
+    init
+};
+
+
+
+================================================
+FILE: WebMap/web-src/ui.js
+================================================
+const ui = {};
+const allUi = document.querySelectorAll('[data-id]');
+allUi.forEach(el => {
+    ui[el.dataset.id] = el;
+});
+
+const tempDiv = document.createElement('div');
+export const createUi = (html, tempEl = tempDiv) => {
+    tempEl.innerHTML = html;
+
+    const uiEls = {};
+    const dataEls = tempEl.querySelectorAll('[data-id]');
+    dataEls.forEach(el => {
+        uiEls[el.dataset.id] = el;
+    });
+
+    return {
+        el: tempEl.children[0],
+        ui: uiEls
+    };
+};
+
+export default ui;
+
+
+
+================================================
+FILE: WebMap/web-src/websocket.js
+================================================
+const actionListeners = {};
+
+const addActionListener = (type, func) => {
+    const listeners = actionListeners[type] || [];
+    listeners.push(func);
+    actionListeners[type] = listeners;
+};
+
+const getActionListeners = (type) => {
+    return actionListeners[type] || [];
+}
+
+const actions = {
+    players: (lines, message) => {
+        const msg = message.replace(/^players\n/, '');
+        const playerSections = msg.split('\n\n');
+        const playerData = [];
+        playerSections.forEach(playerSection => {
+            const playerLines = playerSection.split('\n');
+            if (typeof playerLines[2] === 'undefined') {
+                return;
+            }
+            const newPlayer = {
+                id: playerLines.shift(),
+                name: playerLines.shift(),
+                health: playerLines.shift(),
+                maxHealth: playerLines.shift(),
+                flags: {
+                    dead: false,
+                    pvp: false,
+                    inbed: false,
+                },
+            };
+
+            if (playerLines[0] == 'hidden') {
+                newPlayer.hidden = true;
+                playerLines.shift();
+            } else {
+                newPlayer.hidden = false;
+            }
+            if (typeof playerLines[0] !== 'undefined') {
+                const xyz = playerLines.shift().split(',').map(parseFloat);
+                newPlayer.x = xyz[0];
+                newPlayer.z = xyz[1];
+            }
+            if (typeof playerLines[0] !== 'undefined') {
+                const flags = playerLines.shift();
+                const flag_types = ['dead', 'pvp', 'inbed'];
+                console.log(flags);
+                for (let i = 0; i < flag_types.length; i++) {
+                    console.log(i + " " + flag_types[i] + " " + flags[i]);
+                    newPlayer.flags[flag_types[i]] = Boolean(Number(flags[i]));
+                }
+            }
+            playerData.push(newPlayer);
+        });
+
+        actionListeners.players.forEach(func => {
+            func(playerData);
+        });
+    },
+    ping: (lines) => {
+        const xz = lines[2].split(',');
+        const ping = {
+            playerId: lines[0],
+            name: lines[1],
+            x: parseFloat(xz[0]),
+            z: parseFloat(xz[1])
+        };
+        actionListeners.ping.forEach(func => {
+            func(ping);
+        });
+    },
+    pin: (lines) => {
+        const xz = lines[4].split(',').map(parseFloat);
+        const pin = {
+            id: lines[1],
+            uid: lines[0],
+            type: lines[2],
+            name: lines[3],
+            x: xz[0],
+            z: xz[1],
+            text: lines[5]
+        };
+        actionListeners.pin.forEach(func => {
+            func(pin);
+        });
+    },
+    rmpin: (lines) => {
+        actionListeners.rmpin.forEach(func => {
+            func(lines[0]);
+        });
+    },
+    messages: (lines, message) => {
+        const msg = message.replace(/^messages\n/, '');
+        var messages = JSON.parse(msg);
+        actionListeners.messages.forEach(func => {
+            func(messages);
+        });
+    },
+    reload: (lines) => {
+	window.history.forward(1);
+    }
+};
+
+Object.keys(actions).forEach(key => {
+    actionListeners[key] = [];
+});
+
+let connectionTries = 0;
+const init = () => {
+    const websocketUrl = location.href.split('?')[0].replace(/^http/, 'ws');
+    const ws = new WebSocket(websocketUrl);
+    ws.addEventListener('message', (e) => {
+        const message = e.data.trim();
+        const lines = message.split('\n');
+        const action = lines.shift();
+        const actionFunc = actions[action];
+        if (actionFunc) {
+            actionFunc(lines, message);
+        } else {
+            console.log("unknown websocket message: ", e.data);
+        }
+    });
+
+    ws.addEventListener('open', () => {
+        connectionTries = 0;
+        ws.send('players');
+    });
+
+    ws.addEventListener('close', () => {
+        connectionTries++;
+        const seconds = Math.min(connectionTries * (connectionTries + 1), 120);
+        setTimeout(init, seconds * 1000);
+    });
+};
+
+export default {
+    init,
+    addActionListener,
+    getActionListeners
+};
+
+
+
+
+================================================
+FILE: .config/dotnet-tools.json
+================================================
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "cake.tool": {
+      "version": "5.0.0",
+      "commands": [
+        "dotnet-cake"
+      ],
+      "rollForward": false
+    },
+    "bepinex.assemblypublicizer.cli": {
+      "version": "0.4.3",
+      "commands": [
+        "assembly-publicizer"
+      ],
+      "rollForward": false
+    }
+  }
+}
+
+
