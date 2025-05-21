@@ -26,15 +26,15 @@
 	let iframe: HTMLIFrameElement | null = null;
 
 	// State
-	let currentCoords: Coordinate | null = null;
-	let isRequestingCoords: boolean = false;
-	let status: Status = { message: 'Loading map...', isError: false };
+	let currentCoords: Coordinate | null = $state(null);
+	let isRequestingCoords: boolean = $state(false);
+	let status: Status = $state({ message: 'Loading map...', isError: false });
 
 	let mapIsLoaded = $state(false);
 
 	// Form state
-	let pinType: string = 'dot';
-	let pinText: string = '';
+	let pinType: string = $state('dot');
+	let pinText: string = $state('');
 
 	// Constants
 	const PIN_TYPES: PinType[] = [
@@ -50,6 +50,7 @@
 		const target = event.target as HTMLIFrameElement;
 		iframe = target;
 		updateStatus('Map loaded. Click "Pick Location" to start placing pins.');
+		mapIsLoaded = true;
 	}
 
 	function updateStatus(message: string, isError: boolean = false): void {
@@ -143,6 +144,7 @@
 	});
 
 	$effect(() => {
+		if (!mapIsLoaded) return;
 		if ($query.data) {
 			const pins = $query.data as { label: string; type: PinType['value']; x: number; z: number }[];
 			pins.forEach((pin) => {
