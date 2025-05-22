@@ -1,7 +1,11 @@
 <script lang="ts">
+	import type { Coordinate } from '$lib/types';
+
 	let {
+		coords = null,
 		onClose
 	}: {
+		coords: Coordinate | null;
 		onClose(): void;
 	} = $props();
 
@@ -40,7 +44,10 @@
 
 		<!-- Modal Body -->
 		<div class="px-6 pb-6">
-			<p>ADDDDD</p>
+			<p>
+				TODO: add the input controls and post mutation for adding a pin. Copy the functionality of
+				the bar
+			</p>
 		</div>
 	</dialog>
 
