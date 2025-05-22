@@ -143,7 +143,7 @@
 </script>
 
 {#if isAddPinOpen}
-	<ModalAddPin onClose={() => (isAddPinOpen = false)} />
+	<ModalAddPin onClose={() => (isAddPinOpen = false)} coords={currentCoords} />
 {/if}
 
 <div class="relative grid h-screen sm:grid-rows-[150px_calc(100vh-150px)]">
