@@ -12,7 +12,6 @@
 
 	// State
 	let currentCoords: Coordinate | null = $state(null);
-	let isRequestingCoords: boolean = $state(false);
 	let status: Status = $state({ message: 'Loading map...', isError: false });
 
 	let mapIsLoaded = $state(false);
@@ -33,7 +32,6 @@
 	function prepareCoordinateClick() {
 		if (!iframe || !iframe.contentWindow) return console.error('No iframe');
 		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
-		isRequestingCoords = true;
 	}
 
 	// Event handlers
@@ -48,19 +46,6 @@
 	function updateStatus(message: string, isError: boolean = false): void {
 		status = { message, isError };
 		console.log(isError ? 'Error: ' + message : message);
-	}
-
-	function handlePickLocation(): void {
-		if (!iframe?.contentWindow) {
-			updateStatus('Map not loaded yet. Please wait and try again.', true);
-			return;
-		}
-
-		updateStatus('Click on the map to select coordinates...');
-		isRequestingCoords = true;
-
-		// Request coordinates from the iframe
-		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
 	}
 
 	function handleAddPinLocation(
@@ -129,7 +114,6 @@
 			};
 
 			updateStatus('Coordinates received! Click "Add Pin" to place a pin or pick a new location.');
-			isRequestingCoords = false;
 			prepareCoordinateClick();
 		}
 	}
@@ -164,8 +148,6 @@
 
 <div class="relative grid h-screen sm:grid-rows-[150px_calc(100vh-150px)]">
 	<nav class="hidden h-[150px] bg-slate-900 p-2 sm:block">
-		<h1>Valheim Map</h1>
-
 		<div class="nav-controls">
 			<div class="form-group">
 				<label for="pinType">Pin Type:</label>
@@ -182,15 +164,6 @@
 			</div>
 
 			<div class="nav-buttons">
-				<button
-					id="pickBtn"
-					onclick={handlePickLocation}
-					disabled={isRequestingCoords}
-					class:is-requesting={isRequestingCoords}
-				>
-					{isRequestingCoords ? 'Click on map...' : 'Pick Location'}
-				</button>
-
 				<button
 					id="addPinBtn"
 					onclick={handleAddPin}
