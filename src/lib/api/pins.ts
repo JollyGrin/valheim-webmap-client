@@ -22,7 +22,7 @@ export async function postNewPin({
     z,
     type,
     label,
-    userId: '515e04f2-002c-45bb-8828-b69db1e6cf46' // Static userId
+    userId: '1' // Static userId
   });
   return result.data;
 }
