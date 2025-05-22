@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { useAllPins } from '$lib/api/pins';
+	import { useAllPins, useDeletePin } from '$lib/api/pins';
 	import { onMount } from 'svelte';
 	import type { Coordinate, PinType } from '$lib/types';
 	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
 
 	const query = useAllPins();
+	const removePinMutation = useDeletePin();
 	$inspect($query.data);
 
 	// Refs
@@ -77,6 +78,10 @@
 		}
 	}
 
+	function removePin(pinId: string) {
+		$removePinMutation.mutate(pinId);
+	}
+
 	// Lifecycle
 	onMount(() => {
 		window.addEventListener('message', handleMessage);
@@ -113,7 +118,9 @@
 	<div id="map-container" class=" bg-gray-500">
 		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2">
 			{#each nearbyPins as pin (pin)}
-				<button class="bg-red-300">Remove {pin.label ?? 'Custom Pin'} - {pin.x}:{pin.z}</button>
+				<button class="bg-red-300" onclick={() => removePin(pin.id)}
+					>Remove {pin.label ?? 'Custom Pin'} - {pin.x}:{pin.z}</button
+				>
 			{/each}
 			{#if currentCoords}
 				<button
