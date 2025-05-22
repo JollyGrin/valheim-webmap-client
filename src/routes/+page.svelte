@@ -1,30 +1,13 @@
 <script lang="ts">
 	import { useAllPins, useNewPin } from '$lib/api/pins';
 	import { onMount } from 'svelte';
+	import type { Coordinate, PinType, Status } from '$lib/types';
 
 	const query = useAllPins();
 	const mutation = useNewPin();
 
-	$inspect($query?.data);
-
-	// Types
-	interface Coordinate {
-		x: string;
-		z: string;
-	}
-
-	interface Status {
-		message: string;
-		isError: boolean;
-	}
-
-	interface PinType {
-		value: 'dot' | 'house' | 'fire' | 'mine' | 'cave';
-		label: string;
-	}
-
 	// Refs
-	let iframe: HTMLIFrameElement | null = null;
+	let iframe: HTMLIFrameElement | null = $state(null);
 
 	// State
 	let currentCoords: Coordinate | null = $state(null);
