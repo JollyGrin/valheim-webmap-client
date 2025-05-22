@@ -1,65 +1,52 @@
 <script lang="ts">
-	import { useAllPins, useNewPin } from '$lib/api/pins';
+	import { useAllPins, useDeletePin } from '$lib/api/pins';
 	import { onMount } from 'svelte';
-	import type { Coordinate, PinType, Status } from '$lib/types';
+	import type { Coordinate, PinType } from '$lib/types';
+	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
 
 	const query = useAllPins();
-	const mutation = useNewPin();
+	const removePinMutation = useDeletePin();
+	$inspect($query.data);
 
 	// Refs
 	let iframe: HTMLIFrameElement | null = $state(null);
 
 	// State
 	let currentCoords: Coordinate | null = $state(null);
-	let isRequestingCoords: boolean = $state(false);
-	let status: Status = $state({ message: 'Loading map...', isError: false });
-
 	let mapIsLoaded = $state(false);
 
-	// Form state
-	let pinType: string = $state('dot');
-	let pinText: string = $state('');
+	const nearbyPins = $derived(
+		$query?.data?.filter((pin) => {
+			if (!currentCoords) return false;
+			const radius = 10; // detection radius
 
-	// Constants
-	const PIN_TYPES: PinType[] = [
-		{ value: 'dot', label: 'Dot' },
-		{ value: 'house', label: 'House' },
-		{ value: 'fire', label: 'Fire' },
-		{ value: 'mine', label: 'Mine' },
-		{ value: 'cave', label: 'Cave' }
-	] as const;
+			const dx = Math.abs(parseFloat(pin.x.toString()) - parseFloat(currentCoords.x.toString()));
+			const dz = Math.abs(parseFloat(pin.z.toString()) - parseFloat(currentCoords.z.toString()));
+
+			return dx <= radius && dz <= radius; // square radius
+			// return Math.sqrt(dx*dx + dz*dz) <= radius; // circle radius
+		}) ?? []
+	);
+
+	$inspect(nearbyPins, 'near');
+
+	function prepareCoordinateClick() {
+		if (!iframe || !iframe.contentWindow) return console.error('No iframe');
+		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
+	}
 
 	// Event handlers
 	function handleIframeLoad(event: Event): void {
 		const target = event.target as HTMLIFrameElement;
 		iframe = target;
-		updateStatus('Map loaded. Click "Pick Location" to start placing pins.');
+		console.info('DEBUG: Map loaded. Click "Pick Location" to start placing pins.');
 		mapIsLoaded = true;
+		prepareCoordinateClick();
 	}
 
-	function updateStatus(message: string, isError: boolean = false): void {
-		status = { message, isError };
-		console.log(isError ? 'Error: ' + message : message);
-	}
-
-	function handlePickLocation(): void {
+	function handleAddPinLocation(pin: { type: PinType['value']; label: string } & Coordinate): void {
 		if (!iframe?.contentWindow) {
-			updateStatus('Map not loaded yet. Please wait and try again.', true);
-			return;
-		}
-
-		updateStatus('Click on the map to select coordinates...');
-		isRequestingCoords = true;
-
-		// Request coordinates from the iframe
-		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
-	}
-
-	function handleAddPinLocation(
-		pin: { type: (typeof PIN_TYPES)[number]['value']; label: string } & Coordinate
-	): void {
-		if (!iframe?.contentWindow) {
-			updateStatus('Map not loaded yet.', true);
+			console.error('Cannot add pin location, no iframe available', iframe);
 			return;
 		}
 
@@ -76,40 +63,6 @@
 		);
 	}
 
-	function handleAddPin(): void {
-		if (!currentCoords) {
-			updateStatus('Please select coordinates first', true);
-			return;
-		}
-
-		if (!iframe?.contentWindow) {
-			updateStatus('Map not loaded yet.', true);
-			return;
-		}
-
-		$mutation.mutate({
-			type: 'dot',
-			x: Number(currentCoords.x),
-			z: Number(currentCoords.z),
-			label: pinText
-		});
-
-		// Send pin data to the iframe
-		iframe.contentWindow.postMessage(
-			{
-				type: 'addPin',
-				x: currentCoords.x,
-				z: currentCoords.z,
-				pinType: pinType,
-				pinText: pinText || 'Custom Pin'
-			},
-			'*'
-		);
-
-		updateStatus(`Added ${pinType} pin at (${currentCoords.x}, ${currentCoords.z})`);
-		pinText = ''; // Clear the input for next pin
-	}
-
 	// Handle messages from iframe
 	function handleMessage(event: MessageEvent): void {
 		if (event.data?.type === 'canvasCoords') {
@@ -120,9 +73,13 @@
 				z: worldZ.toString()
 			};
 
-			updateStatus('Coordinates received! Click "Add Pin" to place a pin or pick a new location.');
-			isRequestingCoords = false;
+			console.info('Coordinates recieved:', currentCoords);
+			prepareCoordinateClick();
 		}
+	}
+
+	function removePin(pinId: string) {
+		$removePinMutation.mutate(pinId);
 	}
 
 	// Lifecycle
@@ -145,63 +102,34 @@
 			});
 		}
 	});
+
+	let isAddPinOpen = $state(false);
 </script>
 
-<div class="relative grid h-screen sm:grid-rows-[150px_calc(100vh-150px)]">
-	<nav class="hidden h-[150px] bg-slate-900 p-2 sm:block">
-		<h1>Valheim Map</h1>
+{#if isAddPinOpen}
+	<ModalAddPin onClose={() => (isAddPinOpen = false)} coords={currentCoords} {iframe} />
+{/if}
 
-		<div class="nav-controls">
-			<div class="form-group">
-				<label for="pinType">Pin Type:</label>
-				<select id="pinType" bind:value={pinType}>
-					{#each PIN_TYPES as type (type)}
-						<option value={type.value}>{type.label}</option>
-					{/each}
-				</select>
-			</div>
-
-			<div class="form-group">
-				<label for="pinText">Label:</label>
-				<input type="text" id="pinText" bind:value={pinText} placeholder="Enter pin label" />
-			</div>
-
-			<div class="nav-buttons">
-				<button
-					id="pickBtn"
-					onclick={handlePickLocation}
-					disabled={isRequestingCoords}
-					class:is-requesting={isRequestingCoords}
-				>
-					{isRequestingCoords ? 'Click on map...' : 'Pick Location'}
-				</button>
-
-				<button
-					id="addPinBtn"
-					onclick={handleAddPin}
-					disabled={!currentCoords}
-					class:is-disabled={!currentCoords}
-				>
-					Add Pin
-				</button>
-			</div>
-
-			<div class="coords-display">
-				{#if currentCoords}
-					<div class="coord">X: {parseFloat(currentCoords.x).toFixed(2)}</div>
-					<div class="coord">Z: {parseFloat(currentCoords.z).toFixed(2)}</div>
-				{:else}
-					<div class="no-coords">No location selected</div>
-				{/if}
-			</div>
-		</div>
-
-		<div id="status" class:error={status.isError}>
-			{status.message}
-		</div>
+<div class="relative grid h-screen sm:grid-rows-[50px_calc(100vh-50px)]">
+	<nav class="hidden h-[50px] bg-slate-900 p-2 text-white sm:block">
+		<span>info</span>
 	</nav>
 
 	<div id="map-container" class=" bg-gray-500">
+		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2">
+			{#each nearbyPins as pin (pin)}
+				<button class="bg-red-300" onclick={() => removePin(pin.id)}
+					>Remove {pin.label ?? 'Custom Pin'} - {pin.x}:{pin.z}</button
+				>
+			{/each}
+			{#if currentCoords}
+				<button
+					class="bg-blue-400 transition-all select-none hover:scale-110"
+					onclick={() => (isAddPinOpen = true)}
+					>Add pin at {currentCoords.x}:{currentCoords.z}</button
+				>
+			{/if}
+		</div>
 		<iframe
 			id="map-iframe"
 			title="Valheim WebMap"
@@ -219,38 +147,6 @@
 		font-family: Arial, sans-serif;
 	}
 
-	.nav-controls {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 15px;
-		align-items: center;
-	}
-
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.form-group label {
-		font-size: 0.8rem;
-		color: #ecf0f1;
-	}
-
-	select,
-	input[type='text'] {
-		padding: 6px 10px;
-		border: 1px solid #34495e;
-		border-radius: 4px;
-		background: #34495e;
-		color: white;
-	}
-
-	.nav-buttons {
-		display: flex;
-		gap: 10px;
-	}
-
 	button {
 		padding: 6px 12px;
 		border: none;
@@ -265,73 +161,19 @@
 		cursor: not-allowed;
 	}
 
-	#pickBtn {
-		background: #3498db;
-		color: white;
-	}
-
-	#pickBtn.is-requesting {
-		background: #e67e22;
-	}
-
-	#addPinBtn {
-		background: #2ecc71;
-		color: white;
-	}
-
-	#addPinBtn.is-disabled {
-		background: #7f8c8d;
-	}
-
-	.coords-display {
-		display: flex;
-		gap: 15px;
-		margin-left: auto;
-		color: #ecf0f1;
-		font-family: monospace;
-		font-size: 0.9rem;
-	}
-
-	.no-coords {
-		color: #bdc3c7;
-	}
-
-	#status {
-		margin-top: 10px;
-		padding: 5px 0;
-		font-size: 0.9rem;
-		color: #2ecc71;
-	}
-
-	#status.error {
-		color: #e74c3c;
-	}
-
 	#map-container {
 		flex: 1;
 		width: 100%;
+		height: 100%;
 		position: relative;
 		overflow: hidden;
 	}
 
 	/* Responsive styles */
 	@media (max-width: 768px) {
-		.nav-controls {
-			flex-direction: column;
-			align-items: stretch;
-		}
-
-		.coords-display {
-			margin: 10px 0 0 0;
-			justify-content: space-between;
-		}
 	}
 
 	@media (max-width: 480px) {
-		.nav-buttons {
-			flex-direction: column;
-		}
-
 		button {
 			width: 100%;
 		}
