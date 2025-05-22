@@ -1,8 +1,9 @@
 import { createMutation, createQuery } from '@tanstack/svelte-query';
 import { apiClient } from './apiClient';
+import type { PinDTO } from '$lib/types';
 
 export async function getAllPins() {
-  const result = await apiClient.get('/pins');
+  const result = await apiClient.get<PinDTO[]>('/pins');
   return result.data;
 }
 

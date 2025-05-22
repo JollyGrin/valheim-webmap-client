@@ -5,6 +5,7 @@
 	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
 
 	const query = useAllPins();
+	$inspect($query.data);
 
 	// Refs
 	let iframe: HTMLIFrameElement | null = $state(null);
@@ -12,6 +13,21 @@
 	// State
 	let currentCoords: Coordinate | null = $state(null);
 	let mapIsLoaded = $state(false);
+
+	const nearbyPins = $derived(
+		$query?.data?.filter((pin) => {
+			if (!currentCoords) return false;
+			const radius = 10; // detection radius
+
+			const dx = Math.abs(parseFloat(pin.x.toString()) - parseFloat(currentCoords.x.toString()));
+			const dz = Math.abs(parseFloat(pin.z.toString()) - parseFloat(currentCoords.z.toString()));
+
+			return dx <= radius && dz <= radius; // square radius
+			// return Math.sqrt(dx*dx + dz*dz) <= radius; // circle radius
+		}) ?? []
+	);
+
+	$inspect(nearbyPins, 'near');
 
 	function prepareCoordinateClick() {
 		if (!iframe || !iframe.contentWindow) return console.error('No iframe');
@@ -95,9 +111,14 @@
 	</nav>
 
 	<div id="map-container" class=" bg-gray-500">
-		<div class="absolute bottom-4 z-10 flex w-full justify-center">
+		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2">
+			{#each nearbyPins as pin (pin)}
+				<button class="bg-red-300">Remove {pin.label ?? 'Custom Pin'} - {pin.x}:{pin.z}</button>
+			{/each}
 			{#if currentCoords}
-				<button class="bg-blue-400" onclick={() => (isAddPinOpen = true)}
+				<button
+					class="bg-blue-400 transition-all select-none hover:scale-110"
+					onclick={() => (isAddPinOpen = true)}
 					>Add pin at {currentCoords.x}:{currentCoords.z}</button
 				>
 			{/if}
