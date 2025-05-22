@@ -236,26 +236,6 @@
 		font-family: Arial, sans-serif;
 	}
 
-	.container-all {
-		display: flex;
-		flex-direction: column;
-		height: 100vh;
-		width: 100vw;
-	}
-
-	.navbar {
-		background: #2c3e50;
-		color: white;
-		padding: 10px 20px;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-	}
-
-	.navbar h1 {
-		margin: 0 0 10px 0;
-		color: white;
-		font-size: 1.5rem;
-	}
-
 	.nav-controls {
 		display: flex;
 		flex-wrap: wrap;
