@@ -2,6 +2,7 @@
 	import { useAllPins, useNewPin } from '$lib/api/pins';
 	import { onMount } from 'svelte';
 	import type { Coordinate, PinType, Status } from '$lib/types';
+	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
 
 	const query = useAllPins();
 	const mutation = useNewPin();
@@ -29,12 +30,19 @@
 		{ value: 'cave', label: 'Cave' }
 	] as const;
 
+	function prepareCoordinateClick() {
+		if (!iframe || !iframe.contentWindow) return console.error('No iframe');
+		iframe.contentWindow.postMessage({ type: 'requestCoords' }, '*');
+		isRequestingCoords = true;
+	}
+
 	// Event handlers
 	function handleIframeLoad(event: Event): void {
 		const target = event.target as HTMLIFrameElement;
 		iframe = target;
 		updateStatus('Map loaded. Click "Pick Location" to start placing pins.');
 		mapIsLoaded = true;
+		prepareCoordinateClick();
 	}
 
 	function updateStatus(message: string, isError: boolean = false): void {
@@ -122,6 +130,7 @@
 
 			updateStatus('Coordinates received! Click "Add Pin" to place a pin or pick a new location.');
 			isRequestingCoords = false;
+			prepareCoordinateClick();
 		}
 	}
 
@@ -145,7 +154,13 @@
 			});
 		}
 	});
+
+	let isAddPinOpen = $state(false);
 </script>
+
+{#if isAddPinOpen}
+	<ModalAddPin onClose={() => (isAddPinOpen = false)} />
+{/if}
 
 <div class="relative grid h-screen sm:grid-rows-[150px_calc(100vh-150px)]">
 	<nav class="hidden h-[150px] bg-slate-900 p-2 sm:block">
@@ -184,6 +199,7 @@
 				>
 					Add Pin
 				</button>
+				<button onclick={() => (isAddPinOpen = true)}>ccccc</button>
 			</div>
 
 			<div class="coords-display">
