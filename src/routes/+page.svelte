@@ -1,33 +1,17 @@
 <script lang="ts">
-	import { useAllPins, useNewPin } from '$lib/api/pins';
+	import { useAllPins } from '$lib/api/pins';
 	import { onMount } from 'svelte';
-	import type { Coordinate, PinType, Status } from '$lib/types';
+	import type { Coordinate, PinType } from '$lib/types';
 	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
 
 	const query = useAllPins();
-	const mutation = useNewPin();
 
 	// Refs
 	let iframe: HTMLIFrameElement | null = $state(null);
 
 	// State
 	let currentCoords: Coordinate | null = $state(null);
-	let status: Status = $state({ message: 'Loading map...', isError: false });
-
 	let mapIsLoaded = $state(false);
-
-	// Form state
-	let pinType: string = $state('dot');
-	let pinText: string = $state('');
-
-	// Constants
-	const PIN_TYPES: PinType[] = [
-		{ value: 'dot', label: 'Dot' },
-		{ value: 'house', label: 'House' },
-		{ value: 'fire', label: 'Fire' },
-		{ value: 'mine', label: 'Mine' },
-		{ value: 'cave', label: 'Cave' }
-	] as const;
 
 	function prepareCoordinateClick() {
 		if (!iframe || !iframe.contentWindow) return console.error('No iframe');
@@ -38,21 +22,14 @@
 	function handleIframeLoad(event: Event): void {
 		const target = event.target as HTMLIFrameElement;
 		iframe = target;
-		updateStatus('Map loaded. Click "Pick Location" to start placing pins.');
+		console.info('DEBUG: Map loaded. Click "Pick Location" to start placing pins.');
 		mapIsLoaded = true;
 		prepareCoordinateClick();
 	}
 
-	function updateStatus(message: string, isError: boolean = false): void {
-		status = { message, isError };
-		console.log(isError ? 'Error: ' + message : message);
-	}
-
-	function handleAddPinLocation(
-		pin: { type: (typeof PIN_TYPES)[number]['value']; label: string } & Coordinate
-	): void {
+	function handleAddPinLocation(pin: { type: PinType['value']; label: string } & Coordinate): void {
 		if (!iframe?.contentWindow) {
-			updateStatus('Map not loaded yet.', true);
+			console.error('Cannot add pin location, no iframe available', iframe);
 			return;
 		}
 
@@ -69,40 +46,6 @@
 		);
 	}
 
-	function handleAddPin(): void {
-		if (!currentCoords) {
-			updateStatus('Please select coordinates first', true);
-			return;
-		}
-
-		if (!iframe?.contentWindow) {
-			updateStatus('Map not loaded yet.', true);
-			return;
-		}
-
-		$mutation.mutate({
-			type: 'dot',
-			x: Number(currentCoords.x),
-			z: Number(currentCoords.z),
-			label: pinText
-		});
-
-		// Send pin data to the iframe
-		iframe.contentWindow.postMessage(
-			{
-				type: 'addPin',
-				x: currentCoords.x,
-				z: currentCoords.z,
-				pinType: pinType,
-				pinText: pinText || 'Custom Pin'
-			},
-			'*'
-		);
-
-		updateStatus(`Added ${pinType} pin at (${currentCoords.x}, ${currentCoords.z})`);
-		pinText = ''; // Clear the input for next pin
-	}
-
 	// Handle messages from iframe
 	function handleMessage(event: MessageEvent): void {
 		if (event.data?.type === 'canvasCoords') {
@@ -113,7 +56,7 @@
 				z: worldZ.toString()
 			};
 
-			updateStatus('Coordinates received! Click "Add Pin" to place a pin or pick a new location.');
+			console.info('Coordinates recieved:', currentCoords);
 			prepareCoordinateClick();
 		}
 	}
@@ -176,38 +119,6 @@
 		font-family: Arial, sans-serif;
 	}
 
-	.nav-controls {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 15px;
-		align-items: center;
-	}
-
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.form-group label {
-		font-size: 0.8rem;
-		color: #ecf0f1;
-	}
-
-	select,
-	input[type='text'] {
-		padding: 6px 10px;
-		border: 1px solid #34495e;
-		border-radius: 4px;
-		background: #34495e;
-		color: white;
-	}
-
-	.nav-buttons {
-		display: flex;
-		gap: 10px;
-	}
-
 	button {
 		padding: 6px 12px;
 		border: none;
@@ -222,48 +133,6 @@
 		cursor: not-allowed;
 	}
 
-	#pickBtn {
-		background: #3498db;
-		color: white;
-	}
-
-	#pickBtn.is-requesting {
-		background: #e67e22;
-	}
-
-	#addPinBtn {
-		background: #2ecc71;
-		color: white;
-	}
-
-	#addPinBtn.is-disabled {
-		background: #7f8c8d;
-	}
-
-	.coords-display {
-		display: flex;
-		gap: 15px;
-		margin-left: auto;
-		color: #ecf0f1;
-		font-family: monospace;
-		font-size: 0.9rem;
-	}
-
-	.no-coords {
-		color: #bdc3c7;
-	}
-
-	#status {
-		margin-top: 10px;
-		padding: 5px 0;
-		font-size: 0.9rem;
-		color: #2ecc71;
-	}
-
-	#status.error {
-		color: #e74c3c;
-	}
-
 	#map-container {
 		flex: 1;
 		width: 100%;
@@ -274,22 +143,9 @@
 
 	/* Responsive styles */
 	@media (max-width: 768px) {
-		.nav-controls {
-			flex-direction: column;
-			align-items: stretch;
-		}
-
-		.coords-display {
-			margin: 10px 0 0 0;
-			justify-content: space-between;
-		}
 	}
 
 	@media (max-width: 480px) {
-		.nav-buttons {
-			flex-direction: column;
-		}
-
 		button {
 			width: 100%;
 		}
