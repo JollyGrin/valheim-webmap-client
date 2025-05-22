@@ -40,11 +40,11 @@
 
 	function handleAddPin(): void {
 		if (!coords) {
-			return;
+			return console.error('No coords.', coords);
 		}
 
 		if (!iframe?.contentWindow) {
-			return;
+			return console.error('No iframe', iframe);
 		}
 
 		$mutation.mutate({
@@ -95,7 +95,7 @@
 		<!-- Modal Body -->
 		<div class="px-6 pb-6">
 			<h2 id="modal-title" class="mb-4 text-xl font-semibold">Add New Pin</h2>
-			
+
 			<!-- Coordinates Display -->
 			<div class="mb-4 rounded bg-slate-800 p-2 text-center">
 				{#if coords}
@@ -111,10 +111,10 @@
 			<!-- Pin Type Selection -->
 			<div class="mb-4">
 				<label for="modalPinType" class="mb-1 block font-medium">Pin Type:</label>
-				<select 
-					id="modalPinType" 
+				<select
+					id="modalPinType"
 					bind:value={pinType}
-					class="w-full rounded bg-slate-700 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded bg-slate-700 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 				>
 					{#each PIN_TYPES as type (type.value)}
 						<option value={type.value}>{type.label}</option>
@@ -125,12 +125,12 @@
 			<!-- Pin Label Input -->
 			<div class="mb-4">
 				<label for="modalPinText" class="mb-1 block font-medium">Label:</label>
-				<input 
-					type="text" 
-					id="modalPinText" 
-					bind:value={pinText} 
+				<input
+					type="text"
+					id="modalPinText"
+					bind:value={pinText}
 					placeholder="Enter pin label"
-					class="w-full rounded bg-slate-700 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded bg-slate-700 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 				/>
 			</div>
 
@@ -146,6 +146,7 @@
 					class="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-50"
 					onclick={handleAddPin}
 					disabled={!coords}
+					class:opacity-50={!coords}
 				>
 					Add Pin
 				</button>

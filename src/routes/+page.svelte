@@ -143,54 +143,22 @@
 </script>
 
 {#if isAddPinOpen}
-	<ModalAddPin onClose={() => (isAddPinOpen = false)} coords={currentCoords} />
+	<ModalAddPin onClose={() => (isAddPinOpen = false)} coords={currentCoords} {iframe} />
 {/if}
 
-<div class="relative grid h-screen sm:grid-rows-[150px_calc(100vh-150px)]">
-	<nav class="hidden h-[150px] bg-slate-900 p-2 sm:block">
-		<div class="nav-controls">
-			<div class="form-group">
-				<label for="pinType">Pin Type:</label>
-				<select id="pinType" bind:value={pinType}>
-					{#each PIN_TYPES as type (type)}
-						<option value={type.value}>{type.label}</option>
-					{/each}
-				</select>
-			</div>
-
-			<div class="form-group">
-				<label for="pinText">Label:</label>
-				<input type="text" id="pinText" bind:value={pinText} placeholder="Enter pin label" />
-			</div>
-
-			<div class="nav-buttons">
-				<button
-					id="addPinBtn"
-					onclick={handleAddPin}
-					disabled={!currentCoords}
-					class:is-disabled={!currentCoords}
-				>
-					Add Pin
-				</button>
-				<button onclick={() => (isAddPinOpen = true)}>ccccc</button>
-			</div>
-
-			<div class="coords-display">
-				{#if currentCoords}
-					<div class="coord">X: {parseFloat(currentCoords.x).toFixed(2)}</div>
-					<div class="coord">Z: {parseFloat(currentCoords.z).toFixed(2)}</div>
-				{:else}
-					<div class="no-coords">No location selected</div>
-				{/if}
-			</div>
-		</div>
-
-		<div id="status" class:error={status.isError}>
-			{status.message}
-		</div>
+<div class="relative grid h-screen sm:grid-rows-[50px_calc(100vh-50px)]">
+	<nav class="hidden h-[50px] bg-slate-900 p-2 text-white sm:block">
+		<span>info</span>
 	</nav>
 
 	<div id="map-container" class=" bg-gray-500">
+		<div class="absolute bottom-4 z-10 flex w-full justify-center">
+			{#if currentCoords}
+				<button class="bg-blue-400" onclick={() => (isAddPinOpen = true)}
+					>Add pin at {currentCoords.x}:{currentCoords.z}</button
+				>
+			{/if}
+		</div>
 		<iframe
 			id="map-iframe"
 			title="Valheim WebMap"
@@ -299,6 +267,7 @@
 	#map-container {
 		flex: 1;
 		width: 100%;
+		height: 100%;
 		position: relative;
 		overflow: hidden;
 	}
