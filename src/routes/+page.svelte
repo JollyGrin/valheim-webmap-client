@@ -106,6 +106,7 @@
 	});
 
 	let isAddPinOpen = $state(false);
+	let isAddPhotoOpen = $state(false);
 </script>
 
 {#if isAddPinOpen}
@@ -119,7 +120,7 @@
 
 	<div id="map-container" class=" bg-gray-500">
 		<GalleryDrawer />
-		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2">
+		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2 text-xs">
 			{#each nearbyPins as pin (pin)}
 				<button class="bg-red-300" onclick={() => removePin(pin.id)}
 					>Remove {pin.label ?? 'Custom Pin'} - {pin.x}:{pin.z}</button
@@ -131,15 +132,23 @@
 					onclick={() => (isAddPinOpen = true)}
 					>Add pin at {currentCoords.x}:{currentCoords.z}</button
 				>
+
+				<button
+					class="bg-purple-400 transition-all select-none hover:scale-110"
+					onclick={() => (isAddPinOpen = true)}
+					>Add photo near {Math.floor(Number(currentCoords.x))}:{Math.floor(
+						Number(currentCoords.z)
+					)}</button
+				>
 			{/if}
 		</div>
-		<!-- <iframe -->
-		<!-- 	id="map-iframe" -->
-		<!-- 	title="Valheim WebMap" -->
-		<!-- 	src="https://empty-dream-fe29.innkeeper1.workers.dev/" -->
-		<!-- 	sandbox="allow-same-origin allow-scripts allow-forms" -->
-		<!-- 	onload={handleIframeLoad} -->
-		<!-- ></iframe> -->
+		<iframe
+			id="map-iframe"
+			title="Valheim WebMap"
+			src="https://empty-dream-fe29.innkeeper1.workers.dev/"
+			sandbox="allow-same-origin allow-scripts allow-forms"
+			onload={handleIframeLoad}
+		></iframe>
 	</div>
 </div>
 
