@@ -119,7 +119,7 @@ app.get('/users/:userId/pins', (async (req, res) => {
 // Create a new media item for a pin
 app.post('/pins/:pinId/media', (async (req, res) => {
   const { pinId } = req.params;
-  const { url, note } = req.body;
+  const { url, note, x, z } = req.body;
 
   try {
     // Verify pin exists
@@ -131,10 +131,16 @@ app.post('/pins/:pinId/media', (async (req, res) => {
       return res.status(404).json({ error: 'Pin not found' });
     }
 
+    // Use pin coordinates if x and z are not provided
+    const mediaX = x !== undefined ? parseFloat(x) : pin.x;
+    const mediaZ = z !== undefined ? parseFloat(z) : pin.z;
+
     const media = await prisma.media.create({
       data: {
         url,
         note,
+        x: mediaX,
+        z: mediaZ,
         pinId
       }
     });
@@ -197,6 +203,59 @@ app.get('/media', (async (_req, res) => {
     res.status(500).json({ error: 'Failed to fetch all media' });
   }
 }) as ExpressHandler);
+
+// Get media within coordinate boundaries
+app.get('/media/bounds', (async (req, res) => {
+  // Extract min/max values from query parameters
+  const { minX, maxX, minZ, maxZ } = req.query;
+  
+  // Validate query parameters
+  if (!minX || !maxX || !minZ || !maxZ) {
+    return res.status(400).json({ error: 'Missing required query parameters (minX, maxX, minZ, maxZ)' });
+  }
+  
+  try {
+    // Convert string parameters to numbers
+    const minXFloat = parseFloat(minX as string);
+    const maxXFloat = parseFloat(maxX as string);
+    const minZFloat = parseFloat(minZ as string);
+    const maxZFloat = parseFloat(maxZ as string);
+    
+    // Validate numeric bounds
+    if (isNaN(minXFloat) || isNaN(maxXFloat) || isNaN(minZFloat) || isNaN(maxZFloat)) {
+      return res.status(400).json({ error: 'All bounds must be valid numbers' });
+    }
+    
+    const media = await prisma.media.findMany({
+      where: {
+        x: {
+          gte: minXFloat,
+          lte: maxXFloat
+        },
+        z: {
+          gte: minZFloat,
+          lte: maxZFloat
+        }
+      },
+      include: {
+        pin: {
+          select: {
+            id: true,
+            label: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    res.json(media);
+  } catch (error) {
+    console.error('Error fetching media within bounds:', error);
+    res.status(500).json({ error: 'Failed to fetch media within bounds' });
+  }
+}) as ExpressHandler<any, any, { minX: string; maxX: string; minZ: string; maxZ: string }>);
 
 // User routes
 app.post('/users', (async (req, res) => {

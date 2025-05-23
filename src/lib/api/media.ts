@@ -9,6 +9,8 @@ export interface MediaDTO {
   caption?: string;
   createdAt: string;
   updatedAt: string;
+  x: number;
+  z: number;
 }
 
 /**
@@ -20,11 +22,34 @@ export async function getAllPhotos() {
 }
 
 /**
+ * Interface for the coordinate bounds request
+ */
+export interface MediaBoundsRequest {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * Fetches photos within the specified coordinate boundaries
+ */
+export async function getPhotosInBounds(bounds: MediaBoundsRequest) {
+  const { minX, maxX, minZ, maxZ } = bounds;
+  const result = await apiClient.get<MediaDTO[]>(
+    `/media/bounds?minX=${minX}&maxX=${maxX}&minZ=${minZ}&maxZ=${maxZ}`
+  );
+  return result.data;
+}
+
+/**
  * Interface for creating a new photo
  */
 export interface CreatePhotoRequest {
   imageUrl: string;
   caption?: string;
+  x?: number;
+  z?: number;
 }
 
 /**
@@ -53,6 +78,16 @@ export const useAllPhotos = () =>
   createQuery({
     queryKey: ['photos'],
     queryFn: getAllPhotos
+  });
+
+/**
+ * Hook to fetch photos within coordinate bounds
+ */
+export const usePhotosInBounds = (bounds: MediaBoundsRequest) =>
+  createQuery({
+    queryKey: ['photos', 'bounds', bounds],
+    queryFn: () => getPhotosInBounds(bounds),
+    enabled: !!bounds.minX && !!bounds.maxX && !!bounds.minZ && !!bounds.maxZ
   });
 
 /**
