@@ -26,6 +26,6 @@
 	<img
 		src="https://images.steamusercontent.com/ugc/16577188736000915761/50B65610C956E24D485C151E4EA9613E32FEEB8A/?imw=1024&imh=576&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=true"
 		alt="screenshot"
-		class="rounded-2xl transition-all group-hover:translate-x-[-1rem] group-hover:scale-105 group-hover:saturate-150"
+		class="rounded-2xl transition-all group-hover:saturate-200"
 	/>
 </div>
