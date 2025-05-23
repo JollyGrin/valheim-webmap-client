@@ -97,7 +97,7 @@
 			<h2 id="modal-title" class="mb-4 text-xl font-semibold">Add New Pin</h2>
 
 			<!-- Coordinates Display -->
-			<div class="mb-4 rounded bg-slate-800 p-2 text-center">
+			<div class="mb-4 rounded bg-slate-800 p-2 text-center text-white">
 				{#if coords}
 					<div class="flex justify-center gap-4">
 						<div>X: {parseFloat(coords.x).toFixed(2)}</div>
@@ -114,7 +114,7 @@
 				<select
 					id="modalPinType"
 					bind:value={pinType}
-					class="w-full rounded bg-slate-700 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+					class="w-full rounded bg-slate-700 p-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
 				>
 					{#each PIN_TYPES as type (type.value)}
 						<option value={type.value}>{type.label}</option>
@@ -130,7 +130,7 @@
 					id="modalPinText"
 					bind:value={pinText}
 					placeholder="Enter pin label"
-					class="w-full rounded bg-slate-700 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+					class="w-full rounded bg-slate-700 p-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
 				/>
 			</div>
 
