@@ -28,9 +28,21 @@ model Pin {
   label     String?
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+  media     Media[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([x, z])
   @@index([userId])
+}
+
+model Media {
+  id        String   @id @default(uuid())
+  url       String
+  note      String?
+  pinId     String
+  pin       Pin      @relation(fields: [pinId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([pinId])
 }

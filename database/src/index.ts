@@ -115,6 +115,89 @@ app.get('/users/:userId/pins', (async (req, res) => {
   }
 }) as ExpressHandler);
 
+// Media routes
+// Create a new media item for a pin
+app.post('/pins/:pinId/media', (async (req, res) => {
+  const { pinId } = req.params;
+  const { url, note } = req.body;
+
+  try {
+    // Verify pin exists
+    const pin = await prisma.pin.findUnique({
+      where: { id: pinId }
+    });
+
+    if (!pin) {
+      return res.status(404).json({ error: 'Pin not found' });
+    }
+
+    const media = await prisma.media.create({
+      data: {
+        url,
+        note,
+        pinId
+      }
+    });
+
+    res.status(201).json(media);
+  } catch (error) {
+    console.error('Error creating media:', error);
+    res.status(500).json({ error: 'Failed to create media' });
+  }
+}) as ExpressHandler);
+
+// Get all media for a pin
+app.get('/pins/:pinId/media', (async (req, res) => {
+  const { pinId } = req.params;
+
+  try {
+    const media = await prisma.media.findMany({
+      where: { pinId }
+    });
+    res.json(media);
+  } catch (error) {
+    console.error('Error fetching media:', error);
+    res.status(500).json({ error: 'Failed to fetch media' });
+  }
+}) as ExpressHandler);
+
+// Delete a media item
+app.delete('/media/:id', (async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const media = await prisma.media.delete({
+      where: { id }
+    });
+    res.json(media);
+  } catch (error) {
+    console.error('Error deleting media:', error);
+    res.status(500).json({ error: 'Failed to delete media' });
+  }
+}) as ExpressHandler);
+
+// Get all media (for admin purposes)
+app.get('/media', (async (_req, res) => {
+  try {
+    const media = await prisma.media.findMany({
+      include: {
+        pin: {
+          select: {
+            id: true,
+            label: true,
+            x: true,
+            z: true
+          }
+        }
+      }
+    });
+    res.json(media);
+  } catch (error) {
+    console.error('Error fetching all media:', error);
+    res.status(500).json({ error: 'Failed to fetch all media' });
+  }
+}) as ExpressHandler);
+
 // User routes
 app.post('/users', (async (req, res) => {
   const { username, email, password } = req.body;
