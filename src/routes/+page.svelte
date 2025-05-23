@@ -5,6 +5,7 @@
 	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
 	import PinThumbnail from '$lib/components/Gallery/PinThumbnail.svelte';
 	import GalleryDrawer from '$lib/components/Gallery/GalleryDrawer.svelte';
+	import ModalAddPhoto from '$lib/modal/ModalAddPhoto.svelte';
 
 	const query = useAllPins();
 	const removePinMutation = useDeletePin();
@@ -113,6 +114,10 @@
 	<ModalAddPin onClose={() => (isAddPinOpen = false)} coords={currentCoords} {iframe} />
 {/if}
 
+{#if isAddPhotoOpen}
+	<ModalAddPhoto onClose={() => (isAddPhotoOpen = false)} coords={currentCoords} {iframe} />
+{/if}
+
 <div class="relative grid h-screen sm:grid-rows-[50px_calc(100vh-50px)]">
 	<nav class="hidden h-[50px] bg-slate-900 p-2 text-white sm:block">
 		<span>info</span>
@@ -135,7 +140,7 @@
 
 				<button
 					class="bg-purple-400 transition-all select-none hover:scale-110"
-					onclick={() => (isAddPinOpen = true)}
+					onclick={() => (isAddPhotoOpen = true)}
 					>Add photo near {Math.floor(Number(currentCoords.x))}:{Math.floor(
 						Number(currentCoords.z)
 					)}</button
