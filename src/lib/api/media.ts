@@ -13,11 +13,23 @@ export interface MediaDTO {
   z: number;
 }
 
+// NOTE: GET/POST have different interfaces. silly mistake/should fix - maybe later
+export interface MediaGetDTO {
+  createdAt: string;
+  id: string;
+  note: string;
+  pin?: string;
+  pinId?: string;
+  url: string;
+  x: number;
+  z: number;
+}
+
 /**
  * Fetches all photos from the API
  */
 export async function getAllPhotos() {
-  const result = await apiClient.get<MediaDTO[]>('/media');
+  const result = await apiClient.get<MediaGetDTO[]>('/media');
   return result.data;
 }
 
@@ -36,7 +48,7 @@ export interface MediaBoundsRequest {
  */
 export async function getPhotosInBounds(bounds: MediaBoundsRequest) {
   const { minX, maxX, minZ, maxZ } = bounds;
-  const result = await apiClient.get<MediaDTO[]>(
+  const result = await apiClient.get<MediaGetDTO[]>(
     `/media/bounds?minX=${minX}&maxX=${maxX}&minZ=${minZ}&maxZ=${maxZ}`
   );
   return result.data;

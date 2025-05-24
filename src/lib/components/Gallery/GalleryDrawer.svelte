@@ -1,14 +1,17 @@
 <script>
+	import { useAllPhotos } from '$lib/api/media';
 	import PinThumbnail from './PinThumbnail.svelte';
 
 	// State to track if drawer is expanded
-	let expanded = $state(false);
+	let expanded = $state(true);
 
 	// Function to toggle drawer state
 	function toggleDrawer() {
 		expanded = !expanded;
 		console.log('Drawer toggled:', expanded);
 	}
+
+	const query = useAllPhotos();
 </script>
 
 <div
@@ -19,19 +22,12 @@
 	role="region"
 	aria-label="Gallery drawer"
 >
-	<div class="flex w-full items-center justify-between">
-		<span>Draguar FOB</span>
-		<button
-			type="button"
-			class="z-50 rounded p-1 hover:bg-sky-300/10"
-			onclick={() => (expanded = false)}
-			aria-label="Collapse gallery"
-		>
-			<span class="text-sm">×</span>
-		</button>
-	</div>
-	<PinThumbnail />
-	<PinThumbnail />
+	{#if expanded}
+		{#each $query.data ?? [] as photo, i (i)}
+			<PinThumbnail data={photo} />
+		{/each}
+	{/if}
+
 	<button
 		type="button"
 		class="absolute top-0 right-0 z-50 h-full cursor-pointer bg-sky-300/70 hover:bg-sky-300"

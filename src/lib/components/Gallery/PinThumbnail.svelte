@@ -1,4 +1,9 @@
 <script lang="ts">
+	import type { MediaDTO } from '$lib/api/media';
+
+	let { data }: { data: MediaDTO } = $props();
+	$inspect('photos', data);
+
 	function getFormattedDate(date = new Date()) {
 		const day = date.getDate();
 		const weekday = date.toLocaleString('en-US', { weekday: 'long' });
@@ -14,18 +19,18 @@
 		return `${weekday}, ${month} ${day}${ordinal(day)} ${year}`;
 	}
 
-	const formattedDate = getFormattedDate();
+	const formattedDate = $derived(getFormattedDate(new Date(data?.createdAt ?? '')));
 </script>
 
-<div class="group relative">
+<div class="group relative px-2">
 	<div
 		class="absolute right-1 bottom-1 rounded-xl px-2 py-1 font-mono text-xs text-white backdrop-blur-sm group-hover:hidden"
 	>
 		<span>{formattedDate}</span>
 	</div>
 	<img
-		src="https://images.steamusercontent.com/ugc/16577188736000915761/50B65610C956E24D485C151E4EA9613E32FEEB8A/?imw=1024&imh=576&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=true"
+		src={data?.url ?? ''}
 		alt="screenshot"
-		class="rounded-2xl transition-all group-hover:saturate-200"
+		class="rounded-2xl transition-all group-hover:saturate-200 hover:scale-105"
 	/>
 </div>

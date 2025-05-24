@@ -42,8 +42,8 @@ model Media {
   note      String?
   x         Float
   z         Float
-  pinId     String
-  pin       Pin      @relation(fields: [pinId], references: [id], onDelete: Cascade)
+  pinId     String?
+  pin       Pin?     @relation(fields: [pinId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
   @@index([pinId])

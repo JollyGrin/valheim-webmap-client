@@ -204,6 +204,44 @@ app.get('/media', (async (_req, res) => {
   }
 }) as ExpressHandler);
 
+// Create a new media item directly (without requiring a pin)
+app.post('/media', (async (req, res) => {
+  // Extract fields from request body, handling both our frontend naming and API naming conventions
+  const { imageUrl, caption, x, z, userId } = req.body;
+  
+  // Use the frontend field names or fallback to API names
+  const url = imageUrl || req.body.url;
+  const note = caption || req.body.note;
+  
+  try {
+    // Validation
+    if (!url) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+    
+    if (x === undefined || z === undefined) {
+      return res.status(400).json({ error: 'Coordinates (x, z) are required' });
+    }
+    
+    console.log('Creating media with data:', { url, note, x, z });
+    
+    // Use Prisma's createMany which is less strict with relations
+    const media = await prisma.$queryRaw`
+      INSERT INTO "Media" (id, url, note, x, z, "createdAt") 
+      VALUES (gen_random_uuid(), ${url}, ${note}, ${parseFloat(x)}, ${parseFloat(z)}, NOW())
+      RETURNING *
+    `;
+    
+    // Return the first result since we're only inserting one record
+    const createdMedia = Array.isArray(media) && media.length > 0 ? media[0] : media;
+    
+    res.status(201).json(createdMedia);
+  } catch (error) {
+    console.error('Error creating media:', error);
+    res.status(500).json({ error: 'Failed to create media' });
+  }
+}) as ExpressHandler);
+
 // Get media within coordinate boundaries
 app.get('/media/bounds', (async (req, res) => {
   // Extract min/max values from query parameters
