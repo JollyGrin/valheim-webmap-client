@@ -3,6 +3,9 @@
 	import { onMount } from 'svelte';
 	import type { Coordinate, PinType } from '$lib/types';
 	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
+	import PinThumbnail from '$lib/components/Gallery/PinThumbnail.svelte';
+	import GalleryDrawer from '$lib/components/Gallery/GalleryDrawer.svelte';
+	import ModalAddPhoto from '$lib/modal/ModalAddPhoto.svelte';
 
 	const query = useAllPins();
 	const removePinMutation = useDeletePin();
@@ -104,10 +107,15 @@
 	});
 
 	let isAddPinOpen = $state(false);
+	let isAddPhotoOpen = $state(false);
 </script>
 
 {#if isAddPinOpen}
 	<ModalAddPin onClose={() => (isAddPinOpen = false)} coords={currentCoords} {iframe} />
+{/if}
+
+{#if isAddPhotoOpen}
+	<ModalAddPhoto onClose={() => (isAddPhotoOpen = false)} coords={currentCoords} {iframe} />
 {/if}
 
 <div class="relative grid h-screen sm:grid-rows-[50px_calc(100vh-50px)]">
@@ -116,7 +124,8 @@
 	</nav>
 
 	<div id="map-container" class=" bg-gray-500">
-		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2">
+		<GalleryDrawer />
+		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2 text-xs">
 			{#each nearbyPins as pin (pin)}
 				<button class="bg-red-300" onclick={() => removePin(pin.id)}
 					>Remove {pin.label ?? 'Custom Pin'} - {pin.x}:{pin.z}</button
@@ -127,6 +136,14 @@
 					class="bg-blue-400 transition-all select-none hover:scale-110"
 					onclick={() => (isAddPinOpen = true)}
 					>Add pin at {currentCoords.x}:{currentCoords.z}</button
+				>
+
+				<button
+					class="bg-purple-400 transition-all select-none hover:scale-110"
+					onclick={() => (isAddPhotoOpen = true)}
+					>Add photo near {Math.floor(Number(currentCoords.x))}:{Math.floor(
+						Number(currentCoords.z)
+					)}</button
 				>
 			{/if}
 		</div>

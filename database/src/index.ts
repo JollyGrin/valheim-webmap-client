@@ -115,6 +115,186 @@ app.get('/users/:userId/pins', (async (req, res) => {
   }
 }) as ExpressHandler);
 
+// Media routes
+// Create a new media item for a pin
+app.post('/pins/:pinId/media', (async (req, res) => {
+  const { pinId } = req.params;
+  const { url, note, x, z } = req.body;
+
+  try {
+    // Verify pin exists
+    const pin = await prisma.pin.findUnique({
+      where: { id: pinId }
+    });
+
+    if (!pin) {
+      return res.status(404).json({ error: 'Pin not found' });
+    }
+
+    // Use pin coordinates if x and z are not provided
+    const mediaX = x !== undefined ? parseFloat(x) : pin.x;
+    const mediaZ = z !== undefined ? parseFloat(z) : pin.z;
+
+    const media = await prisma.media.create({
+      data: {
+        url,
+        note,
+        x: mediaX,
+        z: mediaZ,
+        pinId
+      }
+    });
+
+    res.status(201).json(media);
+  } catch (error) {
+    console.error('Error creating media:', error);
+    res.status(500).json({ error: 'Failed to create media' });
+  }
+}) as ExpressHandler);
+
+// Get all media for a pin
+app.get('/pins/:pinId/media', (async (req, res) => {
+  const { pinId } = req.params;
+
+  try {
+    const media = await prisma.media.findMany({
+      where: { pinId }
+    });
+    res.json(media);
+  } catch (error) {
+    console.error('Error fetching media:', error);
+    res.status(500).json({ error: 'Failed to fetch media' });
+  }
+}) as ExpressHandler);
+
+// Delete a media item
+app.delete('/media/:id', (async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const media = await prisma.media.delete({
+      where: { id }
+    });
+    res.json(media);
+  } catch (error) {
+    console.error('Error deleting media:', error);
+    res.status(500).json({ error: 'Failed to delete media' });
+  }
+}) as ExpressHandler);
+
+// Get all media (for admin purposes)
+app.get('/media', (async (_req, res) => {
+  try {
+    const media = await prisma.media.findMany({
+      include: {
+        pin: {
+          select: {
+            id: true,
+            label: true,
+            x: true,
+            z: true
+          }
+        }
+      }
+    });
+    res.json(media);
+  } catch (error) {
+    console.error('Error fetching all media:', error);
+    res.status(500).json({ error: 'Failed to fetch all media' });
+  }
+}) as ExpressHandler);
+
+// Create a new media item directly (without requiring a pin)
+app.post('/media', (async (req, res) => {
+  // Extract fields from request body, handling both our frontend naming and API naming conventions
+  const { imageUrl, caption, x, z, userId } = req.body;
+  
+  // Use the frontend field names or fallback to API names
+  const url = imageUrl || req.body.url;
+  const note = caption || req.body.note;
+  
+  try {
+    // Validation
+    if (!url) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+    
+    if (x === undefined || z === undefined) {
+      return res.status(400).json({ error: 'Coordinates (x, z) are required' });
+    }
+    
+    console.log('Creating media with data:', { url, note, x, z });
+    
+    // Use Prisma's createMany which is less strict with relations
+    const media = await prisma.$queryRaw`
+      INSERT INTO "Media" (id, url, note, x, z, "createdAt") 
+      VALUES (gen_random_uuid(), ${url}, ${note}, ${parseFloat(x)}, ${parseFloat(z)}, NOW())
+      RETURNING *
+    `;
+    
+    // Return the first result since we're only inserting one record
+    const createdMedia = Array.isArray(media) && media.length > 0 ? media[0] : media;
+    
+    res.status(201).json(createdMedia);
+  } catch (error) {
+    console.error('Error creating media:', error);
+    res.status(500).json({ error: 'Failed to create media' });
+  }
+}) as ExpressHandler);
+
+// Get media within coordinate boundaries
+app.get('/media/bounds', (async (req, res) => {
+  // Extract min/max values from query parameters
+  const { minX, maxX, minZ, maxZ } = req.query;
+  
+  // Validate query parameters
+  if (!minX || !maxX || !minZ || !maxZ) {
+    return res.status(400).json({ error: 'Missing required query parameters (minX, maxX, minZ, maxZ)' });
+  }
+  
+  try {
+    // Convert string parameters to numbers
+    const minXFloat = parseFloat(minX as string);
+    const maxXFloat = parseFloat(maxX as string);
+    const minZFloat = parseFloat(minZ as string);
+    const maxZFloat = parseFloat(maxZ as string);
+    
+    // Validate numeric bounds
+    if (isNaN(minXFloat) || isNaN(maxXFloat) || isNaN(minZFloat) || isNaN(maxZFloat)) {
+      return res.status(400).json({ error: 'All bounds must be valid numbers' });
+    }
+    
+    const media = await prisma.media.findMany({
+      where: {
+        x: {
+          gte: minXFloat,
+          lte: maxXFloat
+        },
+        z: {
+          gte: minZFloat,
+          lte: maxZFloat
+        }
+      },
+      include: {
+        pin: {
+          select: {
+            id: true,
+            label: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    res.json(media);
+  } catch (error) {
+    console.error('Error fetching media within bounds:', error);
+    res.status(500).json({ error: 'Failed to fetch media within bounds' });
+  }
+}) as ExpressHandler<any, any, { minX: string; maxX: string; minZ: string; maxZ: string }>);
+
 // User routes
 app.post('/users', (async (req, res) => {
   const { username, email, password } = req.body;

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Coordinate, PinType } from '$lib/types';
-	import { useNewPin } from '$lib/api/pins';
+	import type { Coordinate } from '$lib/types';
+	import { useNewPhoto } from '$lib/api/media';
 
 	let {
 		coords = null,
@@ -12,20 +12,13 @@
 		onClose(): void;
 	} = $props();
 
-	const mutation = useNewPin();
+	const mutation = useNewPhoto();
 
 	// Form state
-	let pinType: string = $state('dot');
-	let pinText: string = $state('');
-
-	// Constants
-	const PIN_TYPES: PinType[] = [
-		{ value: 'dot', label: 'Dot' },
-		{ value: 'house', label: 'House' },
-		{ value: 'fire', label: 'Fire' },
-		{ value: 'mine', label: 'Mine' },
-		{ value: 'cave', label: 'Cave' }
-	] as const;
+	let imageUrl: string = $state('');
+	let caption: string = $state('');
+	let isPreviewValid: boolean = $state(false);
+	let isLoading: boolean = $state(false);
 
 	// Event handlers
 	function handleKeydown(e: KeyboardEvent) {
@@ -38,36 +31,47 @@
 		onClose();
 	}
 
-	function handleAddPin(): void {
+	function validateImageUrl() {
+		if (!imageUrl) {
+			isPreviewValid = false;
+			return;
+		}
+
+		// Check if URL is valid
+		try {
+			new URL(imageUrl);
+			isPreviewValid = true;
+		} catch (e) {
+			isPreviewValid = false;
+		}
+	}
+
+	// Handle image URL changes
+	$effect(() => {
+		validateImageUrl();
+	});
+
+	function handleAddPhoto(): void {
 		if (!coords) {
 			return console.error('No coords.', coords);
 		}
 
-		if (!iframe?.contentWindow) {
-			return console.error('No iframe', iframe);
+		if (!isPreviewValid) {
+			return console.error('Invalid image URL');
 		}
 
+		isLoading = true;
+
 		$mutation.mutate({
-			type: pinType,
+			imageUrl: imageUrl,
+			caption: caption,
 			x: Number(coords.x),
-			z: Number(coords.z),
-			label: pinText
+			z: Number(coords.z)
 		});
 
-		// Send pin data to the iframe
-		iframe.contentWindow.postMessage(
-			{
-				type: 'addPin',
-				x: coords.x,
-				z: coords.z,
-				pinType: pinType,
-				pinText: pinText || 'Custom Pin'
-			},
-			'*'
-		);
-
-		// Close modal after adding pin
+		// Close modal after adding photo
 		onClose();
+		isLoading = false;
 	}
 </script>
 
@@ -94,7 +98,7 @@
 
 		<!-- Modal Body -->
 		<div class="px-6 pb-6">
-			<h2 id="modal-title" class="mb-4 text-xl font-semibold">Add New Pin</h2>
+			<h2 id="modal-title" class="mb-4 text-xl font-semibold">Add New Photo</h2>
 
 			<!-- Coordinates Display -->
 			<div class="mb-4 rounded bg-slate-800 p-2 text-center text-white">
@@ -108,30 +112,45 @@
 				{/if}
 			</div>
 
-			<!-- Pin Type Selection -->
+			<!-- Image URL Input -->
 			<div class="mb-4">
-				<label for="modalPinType" class="mb-1 block font-medium">Pin Type:</label>
-				<select
-					id="modalPinType"
-					bind:value={pinType}
-					class="w-full rounded bg-slate-700 p-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-				>
-					{#each PIN_TYPES as type (type.value)}
-						<option value={type.value}>{type.label}</option>
-					{/each}
-				</select>
-			</div>
-
-			<!-- Pin Label Input -->
-			<div class="mb-4">
-				<label for="modalPinText" class="mb-1 block font-medium">Label:</label>
+				<label for="modalImageUrl" class="mb-1 block font-medium">Image URL:</label>
 				<input
-					type="text"
-					id="modalPinText"
-					bind:value={pinText}
-					placeholder="Enter pin label"
+					type="url"
+					id="modalImageUrl"
+					bind:value={imageUrl}
+					placeholder="Enter image URL"
 					class="w-full rounded bg-slate-700 p-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
 				/>
+			</div>
+
+			<!-- Image Preview -->
+			{#if isPreviewValid && imageUrl}
+				<div class="mb-4 overflow-hidden rounded">
+					<img 
+						src={imageUrl} 
+						alt="Preview" 
+						class="w-full object-cover" 
+						style="max-height: 200px;"
+						onerror={() => (isPreviewValid = false)}
+					/>
+				</div>
+			{:else if imageUrl}
+				<div class="mb-4 rounded bg-red-800 p-2 text-center text-white">
+					Invalid image URL or image cannot be loaded
+				</div>
+			{/if}
+
+			<!-- Caption/Note Input -->
+			<div class="mb-4">
+				<label for="modalCaption" class="mb-1 block font-medium">Caption/Note:</label>
+				<textarea
+					id="modalCaption"
+					bind:value={caption}
+					placeholder="Add a caption or note about this photo"
+					class="w-full rounded bg-slate-700 p-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+					rows="3"
+				></textarea>
 			</div>
 
 			<!-- Action Buttons -->
@@ -144,11 +163,11 @@
 				</button>
 				<button
 					class="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-50"
-					onclick={handleAddPin}
-					disabled={!coords}
-					class:opacity-50={!coords}
+					onclick={handleAddPhoto}
+					disabled={!coords || !isPreviewValid || isLoading}
+					class:opacity-50={!coords || !isPreviewValid || isLoading}
 				>
-					Add Pin
+					{isLoading ? 'Uploading...' : 'Add Photo'}
 				</button>
 			</div>
 		</div>
