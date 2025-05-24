@@ -119,8 +119,11 @@
 {/if}
 
 <div class="relative grid h-screen sm:grid-rows-[50px_calc(100vh-50px)]">
-	<nav class="hidden h-[50px] bg-slate-900 p-2 text-white sm:block">
-		<span>info</span>
+	<nav class="hidden h-[50px] items-center gap-2 bg-slate-900 p-2 text-white sm:flex">
+		<span>Valheim Server: Forest of Grins</span>
+		<span class="rounded-full bg-slate-950 px-2 py-1 font-mono text-xs"
+			>forestofgrins.noob.club:20656
+		</span>
 	</nav>
 
 	<div id="map-container" class=" bg-gray-500">
