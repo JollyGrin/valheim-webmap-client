@@ -1,8 +1,7 @@
 <script lang="ts">
-	import type { MediaDTO } from '$lib/api/media';
+	import type { MediaGetDTO } from '$lib/api/media';
 
-	let { data }: { data: MediaDTO } = $props();
-	$inspect('photos', data);
+	let { data }: { data: MediaGetDTO } = $props();
 
 	function getFormattedDate(date = new Date()) {
 		const day = date.getDate();
@@ -23,6 +22,11 @@
 </script>
 
 <div class="group relative px-2">
+	<div
+		class="absolute top-1 left-3 rounded-xl px-2 py-1 font-mono text-xs text-white backdrop-blur-sm group-hover:hidden"
+	>
+		<span>{Math.floor(data?.x)}:{Math.floor(data?.z)}</span>
+	</div>
 	<div
 		class="absolute right-1 bottom-1 rounded-xl px-2 py-1 font-mono text-xs text-white backdrop-blur-sm group-hover:hidden"
 	>

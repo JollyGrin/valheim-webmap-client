@@ -1,4 +1,5 @@
-<script>
+<script lang="ts">
+	import type { MediaGetDTO } from '$lib/api/media';
 	import { useAllPhotos } from '$lib/api/media';
 	import PinThumbnail from './PinThumbnail.svelte';
 
@@ -12,6 +13,11 @@
 	}
 
 	const query = useAllPhotos();
+	function sortLatestDateFirst(a: MediaGetDTO, b: MediaGetDTO) {
+		const aDate = new Date(a.createdAt).getTime();
+		const bDate = new Date(b.createdAt).getTime();
+		return bDate - aDate;
+	}
 </script>
 
 <div
@@ -23,7 +29,7 @@
 	aria-label="Gallery drawer"
 >
 	{#if expanded}
-		{#each $query.data ?? [] as photo, i (i)}
+		{#each $query.data?.sort(sortLatestDateFirst) ?? [] as photo, i (i)}
 			<PinThumbnail data={photo} />
 		{/each}
 	{/if}
