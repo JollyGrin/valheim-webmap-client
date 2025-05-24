@@ -6,10 +6,10 @@
 	import PinThumbnail from '$lib/components/Gallery/PinThumbnail.svelte';
 	import GalleryDrawer from '$lib/components/Gallery/GalleryDrawer.svelte';
 	import ModalAddPhoto from '$lib/modal/ModalAddPhoto.svelte';
+	import { iframeDrawPin } from '$lib/iframe-utility';
 
 	const query = useAllPins();
 	const removePinMutation = useDeletePin();
-	$inspect($query.data);
 
 	// Refs
 	let iframe: HTMLIFrameElement | null = $state(null);
@@ -30,8 +30,6 @@
 			// return Math.sqrt(dx*dx + dz*dz) <= radius; // circle radius
 		}) ?? []
 	);
-
-	$inspect(nearbyPins, 'near');
 
 	function prepareCoordinateClick() {
 		if (!iframe || !iframe.contentWindow) return console.error('No iframe');
@@ -54,16 +52,17 @@
 		}
 
 		// Send pin data to the iframe
-		iframe.contentWindow.postMessage(
-			{
-				type: 'addPin',
-				x: pin.x.toString(),
-				z: pin.z.toString(),
-				pinType: pin.type || 'dot',
-				pinText: pin.label || 'Custom Pin'
-			},
-			'*'
-		);
+		iframeDrawPin(iframe, pin);
+
+		// Send pin data to the iframe
+		// const payload = {
+		// 	type: 'addPin',
+		// 	x: pin.x.toString(),
+		// 	z: pin.z.toString(),
+		// 	pinType: pin.type || 'dot',
+		// 	pinText: pin.label || 'Custom Pin'
+		// };
+		// iframe.contentWindow.postMessage(payload, '*');
 	}
 
 	// Handle messages from iframe
@@ -99,9 +98,7 @@
 		if ($query.data) {
 			const pins = $query.data as { label: string; type: PinType['value']; x: number; z: number }[];
 			pins.forEach((pin) => {
-				handleAddPinLocation({
-					...pin
-				});
+				handleAddPinLocation({ ...(pin as any) });
 			});
 		}
 	});
