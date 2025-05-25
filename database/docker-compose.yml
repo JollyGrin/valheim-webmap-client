@@ -27,6 +27,8 @@ services:
     restart: always
     ports:
       - '3000:3000'
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/valheim_map?schema=public
       PORT: 3000

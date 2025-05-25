@@ -12,12 +12,36 @@ export interface CreatePinRequest {
 	z: number;
 	type: string;
 	label: string;
+	userId?: string;
 }
 
+// Local storage key for user ID
+const USER_ID_KEY = 'valheim_user_id';
+
 export async function postNewPin(pinData: CreatePinRequest): Promise<PinDTO> {
+	// Get userId from localStorage if available, otherwise use provided userId or null
+	let userId = null;
+
+	// Check if we're in a browser environment
+	if (typeof window !== 'undefined' && window.localStorage) {
+		userId = localStorage.getItem(USER_ID_KEY) || null;
+	}
+
+	// Use provided userId if available, otherwise use the one from localStorage
+	// if (pinData?.userId) {
+	// 	userId = pinData.userId;
+	// }
+
+	// If no userId is available, throw an error
+	if (!userId || userId === null) {
+		alert('User authentication required to create pins. Pin not saved to database');
+		console.error('User authentication required to create pins');
+		throw new Error('User authentication required to create pins');
+	}
+
 	const result = await apiClient.post<PinDTO>('/pins', {
 		...pinData,
-		userId: '1' // Static userId from your deployment
+		userId
 	});
 	return result.data;
 }

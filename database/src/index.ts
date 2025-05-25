@@ -2,6 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import type { Request, Response, NextFunction } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
@@ -12,7 +13,32 @@ type ExpressHandler<ReqBody = any, ResBody = any, ReqQuery = ParsedQs> = (
   res: Response<ResBody>
 ) => Promise<any> | void; // Allow any return type since Express handlers may return Response objects
 
-dotenv.config();
+// Try multiple paths for loading environment variables
+const envPaths = [
+  path.resolve(process.cwd(), '.env'),         // Current working directory
+  path.resolve(__dirname, '../.env'),          // One level up from current file
+  path.resolve(process.cwd(), 'database/.env') // From project root if running from parent dir
+];
+
+// Try each path until we find one that works
+let envLoaded = false;
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    console.log(`Environment variables loaded from: ${envPath}`);
+    envLoaded = true;
+    break;
+  }
+}
+
+// Check if server password is available
+if (!process.env.SERVER_PASSWORD) {
+  console.error('SERVER_PASSWORD environment variable is not set!');
+  console.error('Please ensure your .env file contains: SERVER_PASSWORD=bringsomejolly');
+  console.error('Checked paths:', envPaths);
+} else {
+  console.log('SERVER_PASSWORD is set in environment variables');
+}
 
 const prisma = new PrismaClient();
 const app = express();
@@ -20,6 +46,42 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Authentication middleware function (defined separately before using it)
+function checkServerPassword(req: Request, res: Response, next: NextFunction): void {
+  // Skip authentication for GET requests and the /auth endpoint
+  if (req.method === 'GET' || req.path === '/auth') {
+    return next();
+  }
+  
+  const serverPassword = process.env.SERVER_PASSWORD;
+  const clientPassword = req.headers['x-valheim-server-password'] as string | undefined;
+  
+  // Debug logging
+  console.log(`Request to ${req.path} - Auth header present:`, !!clientPassword);
+  
+  if (!clientPassword) {
+    res.status(401).json({ 
+      success: false,
+      error: 'Authentication required. Please provide server password.' 
+    });
+    return;
+  }
+  
+  if (clientPassword !== serverPassword) {
+    res.status(401).json({ 
+      success: false,
+      error: 'Invalid server password. Please check your credentials.' 
+    });
+    return;
+  }
+  
+  // Password is valid, proceed
+  next();
+}
+
+// Apply the middleware to all routes
+app.use(checkServerPassword);
 
 // Health check endpoint
 app.get('/health', ((_req, res) => {
@@ -295,25 +357,74 @@ app.get('/media/bounds', (async (req, res) => {
   }
 }) as ExpressHandler<any, any, { minX: string; maxX: string; minZ: string; maxZ: string }>);
 
-// User routes
-app.post('/users', (async (req, res) => {
-  const { username, email, password } = req.body;
+// Authentication endpoint for registration and login
+app.post('/auth', (async (req, res) => {
+  const { username, steamId } = req.body;
+  // Get server password from header (for initial login, password still comes in body)
+  const clientPassword = req.headers['x-valheim-server-password'] || req.body.password;
+  const serverPassword = process.env.SERVER_PASSWORD;
+
+  // Debug logging
+  console.log('Auth request received with username:', username);
+  console.log('Auth method:', req.headers['x-valheim-server-password'] ? 'header' : 'body');
+
+  // Validate required fields
+  if (!username) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Username is required' 
+    });
+  }
+
+  if (!clientPassword) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Server password is required' 
+    });
+  }
+
+  // Validate server password
+  if (clientPassword !== serverPassword) {
+    return res.status(401).json({ 
+      success: false,
+      error: 'Invalid server password' 
+    });
+  }
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        username,
-        email,
-        password // Note: In a real app, hash this password!
-      }
+    // Look for existing user with this username
+    let user = await prisma.user.findUnique({
+      where: { username }
     });
 
-    // Don't return the password in response
-    const { password: _, ...userWithoutPassword } = user;
-    res.status(201).json(userWithoutPassword);
+    // If user doesn't exist, create a new one
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          username,
+          steamId: steamId || null
+        }
+      });
+      console.log('Created new user:', username);
+    } else if (steamId && user.steamId !== steamId) {
+      // Update steamId if provided and different from existing one
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { steamId }
+      });
+      console.log('Updated steamId for user:', username);
+    }
+
+    res.status(200).json({
+      success: true,
+      user
+    });
   } catch (error) {
-    console.error('Error creating user:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    console.error('Error in authentication:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Authentication failed' 
+    });
   }
 }) as ExpressHandler);
 
@@ -324,7 +435,7 @@ app.get('/users', (async (_req, res) => {
       select: {
         id: true,
         username: true,
-        email: true,
+        steamId: true,
         createdAt: true,
         _count: {
           select: {
