@@ -295,25 +295,59 @@ app.get('/media/bounds', (async (req, res) => {
   }
 }) as ExpressHandler<any, any, { minX: string; maxX: string; minZ: string; maxZ: string }>);
 
-// User routes
-app.post('/users', (async (req, res) => {
-  const { username, email, password } = req.body;
+// Authentication endpoint for registration and login
+app.post('/auth', (async (req, res) => {
+  const { username, password, steamId } = req.body;
+  const serverPassword = process.env.SERVER_PASSWORD;
+
+  // Validate required fields
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password is required' });
+  }
+
+  // Validate server password
+  if (password !== serverPassword) {
+    return res.status(401).json({ error: 'Invalid server password' });
+  }
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        username,
-        email,
-        password // Note: In a real app, hash this password!
-      }
+    // Look for existing user with this username
+    let user = await prisma.user.findUnique({
+      where: { username }
     });
 
-    // Don't return the password in response
-    const { password: _, ...userWithoutPassword } = user;
-    res.status(201).json(userWithoutPassword);
+    // If user doesn't exist, create a new one
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          username,
+          steamId: steamId || null
+        }
+      });
+      console.log('Created new user:', username);
+    } else if (steamId && user.steamId !== steamId) {
+      // Update steamId if provided and different from existing one
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { steamId }
+      });
+      console.log('Updated steamId for user:', username);
+    }
+
+    res.status(200).json({
+      success: true,
+      user
+    });
   } catch (error) {
-    console.error('Error creating user:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    console.error('Error in authentication:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Authentication failed' 
+    });
   }
 }) as ExpressHandler);
 
