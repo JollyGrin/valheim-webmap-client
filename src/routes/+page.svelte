@@ -143,13 +143,13 @@
 				>
 			{/if}
 		</div>
-		<!-- <iframe -->
-		<!-- 	id="map-iframe" -->
-		<!-- 	title="Valheim WebMap" -->
-		<!-- 	src="https://empty-dream-fe29.innkeeper1.workers.dev/" -->
-		<!-- 	sandbox="allow-same-origin allow-scripts allow-forms" -->
-		<!-- 	onload={handleIframeLoad} -->
-		<!-- ></iframe> -->
+		<iframe
+			id="map-iframe"
+			title="Valheim WebMap"
+			src="https://empty-dream-fe29.innkeeper1.workers.dev/"
+			sandbox="allow-same-origin allow-scripts allow-forms"
+			onload={handleIframeLoad}
+		></iframe>
 	</div>
 </div>
 

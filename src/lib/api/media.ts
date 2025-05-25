@@ -64,13 +64,29 @@ export interface CreatePhotoRequest {
   z?: number;
 }
 
+// Local storage key for user ID
+const USER_ID_KEY = 'valheim_user_id';
+
 /**
  * Posts a new photo to the API
  */
 export async function postNewPhoto(photoData: CreatePhotoRequest): Promise<MediaDTO> {
+  // Get userId from localStorage if available, otherwise null
+  let userId = null;
+  
+  // Check if we're in a browser environment
+  if (typeof window !== 'undefined' && window.localStorage) {
+    userId = localStorage.getItem(USER_ID_KEY) || null;
+  }
+  
+  // If no userId is available, throw an error
+  if (!userId) {
+    throw new Error('User authentication required to upload photos');
+  }
+  
   const result = await apiClient.post<MediaDTO>('/media', {
     ...photoData,
-    userId: '1' // Static userId from your deployment
+    userId
   });
   return result.data;
 }
