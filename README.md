@@ -72,10 +72,10 @@ Add the following script to handle incoming messages for pin creation:
 
 ### 3. Modified `main.js`
 
-Unminified and exposed pin creation functionality by adding this code before the final `})();`:
+Unminified and exposed functionality by adding this code before the final `})();`:
 
 ```javascript
-// Expose pin creation to the window object
+// Expose pin creation and panning to the window object
 window.valheimMap = {
 	addPin: function (x, z, type = 'dot', text = '') {
 		const pin = {
@@ -90,6 +90,48 @@ window.valheimMap = {
 		// Use the app's built-in function to add the pin
 		H(pin);
 
+		return true;
+	},
+	
+	panTo: function (x, z) {
+		// Reset following state to prevent drag issues
+		C = null;
+		if (typeof j === 'function') {
+			j(null);
+		}
+		
+		// Convert world coordinates to map position
+		const worldX = parseFloat(x);
+		const worldZ = parseFloat(z);
+		const mapX = worldX / g + u;
+		const mapY = E - (worldZ / g + u);
+		const posX = (100 * mapX) / L;
+		const posY = (100 * mapY) / E;
+		
+		// Create a temporary marker for positioning
+		const marker = document.createElement('div');
+		marker.style.position = 'absolute';
+		marker.style.left = posX + '%';
+		marker.style.top = posY + '%';
+		marker.style.width = '1px';
+		marker.style.height = '1px';
+		h.appendChild(marker);
+		
+		// Center the map on the marker
+		r.map.classList.remove('smooth');
+		const rect = marker.getBoundingClientRect();
+		const offsetX = window.innerWidth / 2 - rect.left;
+		const offsetY = window.innerHeight / 2 - rect.top;
+		h.style.left = (offsetX + h.offsetLeft) + 'px';
+		h.style.top = (offsetY + h.offsetTop) + 'px';
+		
+		// Cleanup
+		setTimeout(() => {
+			r.map.classList.add('smooth');
+			marker.remove();
+			C = null;
+		}, 50);
+		
 		return true;
 	}
 };
@@ -148,6 +190,18 @@ The wrapper (`test4.html`) provides a user interface for:
    );
    ```
 
+4. **Panning to a Location**:
+   ```javascript
+   iframe.contentWindow.postMessage(
+   	{
+   		type: 'panTo',
+   		x: xCoord,
+   		z: zCoord
+   	},
+   	'*'
+   );
+   ```
+
 ## Setup Instructions
 
 1. Deploy the modified WebMap files to your web server
@@ -179,6 +233,23 @@ The wrapper (`test4.html`) provides a user interface for:
 - If pins don't appear, check the browser's console for errors
 - Ensure the iframe URL is correct and accessible
 - Verify that both pages are using the same protocol (http/https)
+
+---
+
+# Dev notes
+
+timestamped notes of progress made
+
+### 2025 May 25
+
+- Implemented map panning functionality
+  - Added `panTo` method to `window.valheimMap` object to allow centering on specific coordinates
+  - Extended window message listener to handle 'panTo' events from the wrapper
+  - Ensured proper handling of 'following' state to maintain normal dragging behavior
+  - Implemented smooth transitions when panning to a location
+- Updated documentation
+  - Added panning examples to README.md
+  - Documented the message format for the panTo functionality
 
 ---
 
