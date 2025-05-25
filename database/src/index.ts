@@ -358,7 +358,7 @@ app.get('/users', (async (_req, res) => {
       select: {
         id: true,
         username: true,
-        email: true,
+        steamId: true,
         createdAt: true,
         _count: {
           select: {
