@@ -1,7 +1,7 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { apiClient } from './apiClient';
 
-// Define types for user authentication and data
+// Define types for user data and registration
 export interface UserDTO {
   id: string;
   username: string;
@@ -10,31 +10,30 @@ export interface UserDTO {
   updatedAt: string;
 }
 
-export interface AuthRequest {
+export interface RegisterRequest {
   username: string;    // Valheim username
   password: string;    // Server password (same for everyone)
   steamId?: string;    // Optional Steam user ID
 }
 
-export interface AuthResponse {
+export interface RegisterResponse {
   user: UserDTO;
   success: boolean;
-  message?: string;
+  error?: string;
 }
 
-// Function to authenticate a user
-export async function authenticateUser(authData: AuthRequest): Promise<AuthResponse> {
+// Function to register/authenticate a user
+export async function registerUser(userData: RegisterRequest): Promise<RegisterResponse> {
   try {
-    // Instead of the normal /users endpoint, we'll create a custom auth endpoint
-    // This will be implemented on the backend later
-    const result = await apiClient.post<AuthResponse>('/auth', authData);
+    // Use the /auth endpoint we created on the backend
+    const result = await apiClient.post<RegisterResponse>('/auth', userData);
     return result.data;
   } catch (error: any) {
     // Return a structured error response
     return {
       user: {} as UserDTO,
       success: false,
-      message: error.response?.data?.error || 'Authentication failed'
+      error: error.response?.data?.error || 'Registration/authentication failed'
     };
   }
 }
@@ -51,26 +50,32 @@ export async function getUserById(id: string): Promise<UserDTO> {
   return result.data;
 }
 
-// Create a mutation hook for authentication
-export const useAuthenticate = () => {
+// Create a mutation hook for registration/authentication
+export const useRegister = () => {
   const queryClient = useQueryClient();
   
   return createMutation({
-    mutationKey: ['authenticate'],
-    mutationFn: authenticateUser,
+    mutationKey: ['register'],
+    mutationFn: registerUser,
     onSuccess: (data) => {
       if (data.success) {
-        // If authentication is successful, invalidate and update the users cache
+        // If registration/authentication is successful, invalidate users cache
         queryClient.invalidateQueries({
           queryKey: ['users']
         });
         
-        // Optionally store the user in the query cache for easy access
+        // Store the user in the query cache for easy access across the app
         queryClient.setQueryData(['currentUser'], data.user);
       }
     }
   });
 };
+
+// Helper function to check if user is already authenticated (client-side)
+export function getCurrentUser() {
+  const queryClient = useQueryClient();
+  return queryClient.getQueryData<UserDTO>(['currentUser']);
+}
 
 // Query hook for getting all users
 export const useAllUsers = () =>
