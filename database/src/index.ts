@@ -2,6 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import type { Request, Response, NextFunction } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
@@ -12,7 +13,32 @@ type ExpressHandler<ReqBody = any, ResBody = any, ReqQuery = ParsedQs> = (
   res: Response<ResBody>
 ) => Promise<any> | void; // Allow any return type since Express handlers may return Response objects
 
-dotenv.config();
+// Try multiple paths for loading environment variables
+const envPaths = [
+  path.resolve(process.cwd(), '.env'),         // Current working directory
+  path.resolve(__dirname, '../.env'),          // One level up from current file
+  path.resolve(process.cwd(), 'database/.env') // From project root if running from parent dir
+];
+
+// Try each path until we find one that works
+let envLoaded = false;
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    console.log(`Environment variables loaded from: ${envPath}`);
+    envLoaded = true;
+    break;
+  }
+}
+
+// Check if server password is available
+if (!process.env.SERVER_PASSWORD) {
+  console.error('SERVER_PASSWORD environment variable is not set!');
+  console.error('Please ensure your .env file contains: SERVER_PASSWORD=bringsomejolly');
+  console.error('Checked paths:', envPaths);
+} else {
+  console.log('SERVER_PASSWORD is set in environment variables');
+}
 
 const prisma = new PrismaClient();
 const app = express();
@@ -300,6 +326,11 @@ app.post('/auth', (async (req, res) => {
   const { username, password, steamId } = req.body;
   const serverPassword = process.env.SERVER_PASSWORD;
 
+  // Debug logging
+  console.log('Auth request received with username:', username);
+  console.log('Server password from env:', serverPassword);
+  console.log('Password matches env:', password === serverPassword);
+
   // Validate required fields
   if (!username) {
     return res.status(400).json({ error: 'Username is required' });
@@ -311,6 +342,7 @@ app.post('/auth', (async (req, res) => {
 
   // Validate server password
   if (password !== serverPassword) {
+    console.log('Password mismatch - Request password:', password, 'Env password:', serverPassword);
     return res.status(401).json({ error: 'Invalid server password' });
   }
 
