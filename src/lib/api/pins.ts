@@ -12,12 +12,15 @@ export interface CreatePinRequest {
 	z: number;
 	type: string;
 	label: string;
+	userId?: string;
 }
 
 export async function postNewPin(pinData: CreatePinRequest): Promise<PinDTO> {
+	let userId = '1';
+	if (pinData?.userId) userId = pinData?.userId;
 	const result = await apiClient.post<PinDTO>('/pins', {
 		...pinData,
-		userId: '1' // Static userId from your deployment
+		userId
 	});
 	return result.data;
 }
