@@ -1,5 +1,18 @@
 <script lang="ts">
+	import { useRegister, type RegisterRequest } from '$lib/api/user';
+
 	let isOpen = $state(false);
+	let usernameRef: string = $state('');
+	let serverRef: string = $state('');
+
+	const newUserMutation = useRegister();
+	function registerNewUser() {
+		const payload: RegisterRequest = {
+			username: usernameRef,
+			password: serverRef
+		};
+		$newUserMutation.mutate(payload);
+	}
 </script>
 
 <nav class="hidden h-[50px] items-center justify-between bg-slate-900 p-2 text-white sm:flex">
@@ -11,9 +24,9 @@
 	</div>
 	{#if isOpen}
 		<div class="flex gap-2">
-			<input placeholder="username" />
-			<input placeholder="server password" />
-			<button class="w-fit rounded-full bg-sky-500 px-4"> login </button>
+			<input placeholder="username" bind:value={usernameRef} />
+			<input placeholder="server password" bind:value={serverRef} />
+			<button class="w-fit rounded-full bg-sky-500 px-4" onclick={registerNewUser}> login </button>
 		</div>
 	{:else}
 		<button class="w-fit rounded-full bg-sky-500 px-4" onclick={() => (isOpen = true)}>
