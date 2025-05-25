@@ -568,40 +568,85 @@
 
       return true;
     },
-    
+
+    // Add a function to show a temporary ping marker
+    showPing: function(x, z, options = {}) {
+      // Default options
+      const defaults = {
+        text: options.text || 'Location',
+        duration: options.duration || 3000
+      };
+
+      // Merge defaults with provided options
+      const settings = { ...defaults, ...options };
+
+      // Create a ping marker similar to how the game does it
+      const pingMarker = {
+        type: 'ping', // This gives it the concentric circles styling
+        text: settings.text,
+        x: parseFloat(x),
+        z: parseFloat(z),
+        el: null,
+        // Generate a unique ID to track this ping
+        id: `custom_ping_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+
+      // Add the ping to the map
+      H(pingMarker, false); // false = don't immediately update positions
+
+      // Update positions to show the ping
+      $();
+
+      // Set a timeout to remove the ping after the specified duration
+      const timeoutId = setTimeout(() => {
+        // Use the V function (alias for R) to remove the marker
+        V(pingMarker);
+      }, settings.duration);
+
+      // Return the ping reference and timeout ID so it could be cancelled early if needed
+      return {
+        marker: pingMarker,
+        timeoutId: timeoutId,
+        cancel: function() {
+          clearTimeout(this.timeoutId);
+          V(this.marker);
+        }
+      };
+    },
+
     panTo: function(x, z) {
       // CRITICAL: Set C to null directly to fix dragging behavior
       // The dragging handler checks the C variable on line 286
       // and when C is not null, normal dragging is skipped
       C = null;
-      
+
       // Also use j() function if available to fully stop following
       if (typeof j === 'function') {
         j(null);
       }
-      
+
       // Reset Z which tracks the followed player
       if (typeof Z !== 'undefined') {
         Z = null;
       }
-      
+
       // Remove any follow message
       if (r.topMessage) {
         r.topMessage.textContent = '';
       }
-      
+
       // Calculate the map position from world coordinates
       const worldX = parseFloat(x);
       const worldZ = parseFloat(z);
-      
+
       // Convert world coordinates to map coordinates
       const mapX = worldX / g + u;
       const mapY = E - (worldZ / g + u);
-      
+
       // Calculate pixel position as percentage of map width/height
       const posX = (100 * mapX) / L;
       const posY = (100 * mapY) / E;
-      
+
       // Create a marker element at the target position
       const marker = document.createElement('div');
       marker.style.position = 'absolute';
@@ -611,34 +656,34 @@
       marker.style.height = '1px';
       marker.style.pointerEvents = 'none';
       h.appendChild(marker);
-      
+
       // Calculate the offset needed to center this point
       const rect = marker.getBoundingClientRect();
       const offsetX = window.innerWidth / 2 - rect.left;
       const offsetY = window.innerHeight / 2 - rect.top;
-      
+
       // Remove smooth transitions temporarily
       r.map.classList.remove('smooth');
-      
+
       // Center the map on this point
-      h.style.left = (offsetX + h.offsetLeft) + 'px';
-      h.style.top = (offsetY + h.offsetTop) + 'px';
-      
+      h.style.left = offsetX + h.offsetLeft + 'px';
+      h.style.top = offsetY + h.offsetTop + 'px';
+
       // Clean up and restore smooth transitions
       setTimeout(() => {
         r.map.classList.add('smooth');
         marker.remove();
-        
+
         // IMPORTANT: Set C to null again to ensure normal dragging works
         // This must happen AFTER the panning operation completes
         C = null;
-        
+
         // For extra safety, call j(null) again
         if (typeof j === 'function') {
           j(null);
         }
       }, 50);
-      
+
       return true;
     }
   };
@@ -659,6 +704,11 @@
       const { x, z } = event.data;
       if (window.valheimMap && window.valheimMap.panTo) {
         window.valheimMap.panTo(parseFloat(x), parseFloat(z));
+      }
+    } else if (event.data.type === 'showPing') {
+      const { x, z, options } = event.data;
+      if (window.valheimMap && window.valheimMap.showPing) {
+        window.valheimMap.showPing(parseFloat(x), parseFloat(z), options || {});
       }
     }
   });
