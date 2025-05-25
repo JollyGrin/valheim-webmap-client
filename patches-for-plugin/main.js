@@ -567,6 +567,79 @@
       H(pin);
 
       return true;
+    },
+    
+    panTo: function(x, z) {
+      // CRITICAL: Set C to null directly to fix dragging behavior
+      // The dragging handler checks the C variable on line 286
+      // and when C is not null, normal dragging is skipped
+      C = null;
+      
+      // Also use j() function if available to fully stop following
+      if (typeof j === 'function') {
+        j(null);
+      }
+      
+      // Reset Z which tracks the followed player
+      if (typeof Z !== 'undefined') {
+        Z = null;
+      }
+      
+      // Remove any follow message
+      if (r.topMessage) {
+        r.topMessage.textContent = '';
+      }
+      
+      // Calculate the map position from world coordinates
+      const worldX = parseFloat(x);
+      const worldZ = parseFloat(z);
+      
+      // Convert world coordinates to map coordinates
+      const mapX = worldX / g + u;
+      const mapY = E - (worldZ / g + u);
+      
+      // Calculate pixel position as percentage of map width/height
+      const posX = (100 * mapX) / L;
+      const posY = (100 * mapY) / E;
+      
+      // Create a marker element at the target position
+      const marker = document.createElement('div');
+      marker.style.position = 'absolute';
+      marker.style.left = posX + '%';
+      marker.style.top = posY + '%';
+      marker.style.width = '1px';
+      marker.style.height = '1px';
+      marker.style.pointerEvents = 'none';
+      h.appendChild(marker);
+      
+      // Calculate the offset needed to center this point
+      const rect = marker.getBoundingClientRect();
+      const offsetX = window.innerWidth / 2 - rect.left;
+      const offsetY = window.innerHeight / 2 - rect.top;
+      
+      // Remove smooth transitions temporarily
+      r.map.classList.remove('smooth');
+      
+      // Center the map on this point
+      h.style.left = (offsetX + h.offsetLeft) + 'px';
+      h.style.top = (offsetY + h.offsetTop) + 'px';
+      
+      // Clean up and restore smooth transitions
+      setTimeout(() => {
+        r.map.classList.add('smooth');
+        marker.remove();
+        
+        // IMPORTANT: Set C to null again to ensure normal dragging works
+        // This must happen AFTER the panning operation completes
+        C = null;
+        
+        // For extra safety, call j(null) again
+        if (typeof j === 'function') {
+          j(null);
+        }
+      }, 50);
+      
+      return true;
     }
   };
 
@@ -582,6 +655,11 @@
           pinText || 'Custom Pin'
         );
       }
+    } else if (event.data.type === 'panTo') {
+      const { x, z } = event.data;
+      if (window.valheimMap && window.valheimMap.panTo) {
+        window.valheimMap.panTo(parseFloat(x), parseFloat(z));
+      }
     }
   });
-})(); // This is the original closing of the IIFE
+})(); // End of IIFE
