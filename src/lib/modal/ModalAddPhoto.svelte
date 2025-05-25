@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Coordinate } from '$lib/types';
 	import { useNewPhoto } from '$lib/api/media';
+	import { onMount } from 'svelte';
 
 	let {
 		coords = null,
@@ -19,6 +20,15 @@
 	let caption: string = $state('');
 	let isPreviewValid: boolean = $state(false);
 	let isLoading: boolean = $state(false);
+
+	let steamUserName = $state('');
+	const STEAM_ID_KEY = 'valheim_steam_id';
+	const steamGalleryUrl = $derived(`https://steamcommunity.com/id/${steamUserName}/screenshots/`);
+
+	onMount(() => {
+		const storedSteamId = localStorage.getItem(STEAM_ID_KEY);
+		steamUserName = storedSteamId ?? '';
+	});
 
 	// Event handlers
 	function handleKeydown(e: KeyboardEvent) {
@@ -100,6 +110,12 @@
 		<div class="px-6 pb-6">
 			<h2 id="modal-title" class="mb-4 text-xl font-semibold">Add New Photo</h2>
 
+			{#if steamUserName !== '' || steamUserName.length > 1}
+				<a href={steamGalleryUrl} class="text-blue-400 underline" target="_blank"
+					>Link to your Steam Gallery</a
+				>
+			{/if}
+
 			<!-- Coordinates Display -->
 			<div class="mb-4 rounded bg-slate-800 p-2 text-center text-white">
 				{#if coords}
@@ -127,10 +143,10 @@
 			<!-- Image Preview -->
 			{#if isPreviewValid && imageUrl}
 				<div class="mb-4 overflow-hidden rounded">
-					<img 
-						src={imageUrl} 
-						alt="Preview" 
-						class="w-full object-cover" 
+					<img
+						src={imageUrl}
+						alt="Preview"
+						class="w-full object-cover"
 						style="max-height: 200px;"
 						onerror={() => (isPreviewValid = false)}
 					/>
