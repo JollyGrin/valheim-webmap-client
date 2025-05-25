@@ -47,6 +47,42 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Authentication middleware function (defined separately before using it)
+function checkServerPassword(req: Request, res: Response, next: NextFunction): void {
+  // Skip authentication for GET requests and the /auth endpoint
+  if (req.method === 'GET' || req.path === '/auth') {
+    return next();
+  }
+  
+  const serverPassword = process.env.SERVER_PASSWORD;
+  const clientPassword = req.headers['x-valheim-server-password'] as string | undefined;
+  
+  // Debug logging
+  console.log(`Request to ${req.path} - Auth header present:`, !!clientPassword);
+  
+  if (!clientPassword) {
+    res.status(401).json({ 
+      success: false,
+      error: 'Authentication required. Please provide server password.' 
+    });
+    return;
+  }
+  
+  if (clientPassword !== serverPassword) {
+    res.status(401).json({ 
+      success: false,
+      error: 'Invalid server password. Please check your credentials.' 
+    });
+    return;
+  }
+  
+  // Password is valid, proceed
+  next();
+}
+
+// Apply the middleware to all routes
+app.use(checkServerPassword);
+
 // Health check endpoint
 app.get('/health', ((_req, res) => {
   res.json({ status: 'ok' });
@@ -323,27 +359,36 @@ app.get('/media/bounds', (async (req, res) => {
 
 // Authentication endpoint for registration and login
 app.post('/auth', (async (req, res) => {
-  const { username, password, steamId } = req.body;
+  const { username, steamId } = req.body;
+  // Get server password from header (for initial login, password still comes in body)
+  const clientPassword = req.headers['x-valheim-server-password'] || req.body.password;
   const serverPassword = process.env.SERVER_PASSWORD;
 
   // Debug logging
   console.log('Auth request received with username:', username);
-  console.log('Server password from env:', serverPassword);
-  console.log('Password matches env:', password === serverPassword);
+  console.log('Auth method:', req.headers['x-valheim-server-password'] ? 'header' : 'body');
 
   // Validate required fields
   if (!username) {
-    return res.status(400).json({ error: 'Username is required' });
+    return res.status(400).json({ 
+      success: false,
+      error: 'Username is required' 
+    });
   }
 
-  if (!password) {
-    return res.status(400).json({ error: 'Password is required' });
+  if (!clientPassword) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Server password is required' 
+    });
   }
 
   // Validate server password
-  if (password !== serverPassword) {
-    console.log('Password mismatch - Request password:', password, 'Env password:', serverPassword);
-    return res.status(401).json({ error: 'Invalid server password' });
+  if (clientPassword !== serverPassword) {
+    return res.status(401).json({ 
+      success: false,
+      error: 'Invalid server password' 
+    });
   }
 
   try {
