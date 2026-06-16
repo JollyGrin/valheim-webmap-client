@@ -147,7 +147,7 @@
 		<iframe
 			id="map-iframe"
 			title="Valheim WebMap"
-			src="https://empty-dream-fe29.innkeeper1.workers.dev/"
+			src="https://empty-dream-fe29.innkeeper1.workers.dev/?timestamp=1"
 			sandbox="allow-same-origin allow-scripts allow-forms"
 			onload={handleIframeLoad}
 		></iframe>

@@ -690,25 +690,54 @@
 
   // Add to main.js (in the iframe)
   window.addEventListener('message', function(event) {
+    // Add verbose debugging for all messages
+    console.log('[IFRAME] Received message:', event.data);
+    
     if (event.data.type === 'addPin') {
+      console.log('[IFRAME] Processing addPin message');
       const { x, z, pinType, pinText } = event.data;
+      console.log('[IFRAME] addPin params:', { x, z, pinType, pinText });
+      
       if (window.valheimMap && window.valheimMap.addPin) {
+        console.log('[IFRAME] Calling window.valheimMap.addPin');
         window.valheimMap.addPin(
           parseFloat(x),
           parseFloat(z),
           pinType || 'dot',
           pinText || 'Custom Pin'
         );
+      } else {
+        console.error('[IFRAME] window.valheimMap.addPin not available!');
       }
     } else if (event.data.type === 'panTo') {
+      console.log('[IFRAME] Processing panTo message');
       const { x, z } = event.data;
+      console.log('[IFRAME] panTo params:', { x, z });
+      
+      console.log('[IFRAME] valheimMap available:', !!window.valheimMap);
+      console.log('[IFRAME] panTo function available:', !!(window.valheimMap && window.valheimMap.panTo));
+      
       if (window.valheimMap && window.valheimMap.panTo) {
-        window.valheimMap.panTo(parseFloat(x), parseFloat(z));
+        console.log('[IFRAME] Calling window.valheimMap.panTo with:', parseFloat(x), parseFloat(z));
+        try {
+          window.valheimMap.panTo(parseFloat(x), parseFloat(z));
+          console.log('[IFRAME] panTo call completed');
+        } catch (error) {
+          console.error('[IFRAME] Error in panTo:', error);
+        }
+      } else {
+        console.error('[IFRAME] window.valheimMap.panTo not available!');
       }
     } else if (event.data.type === 'showPing') {
+      console.log('[IFRAME] Processing showPing message');
       const { x, z, options } = event.data;
+      console.log('[IFRAME] showPing params:', { x, z, options });
+      
       if (window.valheimMap && window.valheimMap.showPing) {
+        console.log('[IFRAME] Calling window.valheimMap.showPing');
         window.valheimMap.showPing(parseFloat(x), parseFloat(z), options || {});
+      } else {
+        console.error('[IFRAME] window.valheimMap.showPing not available!');
       }
     }
   });
