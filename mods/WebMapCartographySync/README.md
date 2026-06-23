@@ -82,7 +82,8 @@ These are verified against decompiled source but worth a glance after major Valh
 
 - **Map-data `version == 2`** and the field layout in `CartographyScanner.ReadPins`. If a future
   patch bumps the version, re-check `Minimap.GetSharedMapData`.
-- **`ZDOMan.GetAllZDOsWithPrefab(string, List<ZDO>)`** signature (logs an error if it differs).
+- **`ZDOMan.GetAllZDOsWithPrefabIterative(string, List<ZDO>, ref int)`** signature — looped
+  until it returns true (logs an error if it differs).
 - **`piece_cartographytable`** prefab name (configurable).
 - **WebMap reflection targets**: static `mapDataServer` field, `AddPin(6 args)`, static
   `SavePins()`, `pins` list. The bind step logs exactly what it found/missed.

@@ -96,12 +96,17 @@ namespace WebMapCartographySync
             var result = new List<ZDO>();
             try
             {
-                // Signature in current Valheim: bool GetAllZDOsWithPrefab(string prefab, List<ZDO> zdos)
-                ZDOMan.instance.GetAllZDOsWithPrefab(_config.CartographyPrefab.Value, result);
+                // Current Valheim only exposes the iterative form. It appends matches to `result`,
+                // processes ~400 sectors per call, advances `index`, and returns true when complete.
+                int index = 0;
+                while (!ZDOMan.instance.GetAllZDOsWithPrefabIterative(_config.CartographyPrefab.Value, result, ref index))
+                {
+                    // keep going until it reports done
+                }
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogError($"GetAllZDOsWithPrefab failed (signature mismatch?): {ex.Message}");
+                Plugin.Log.LogError($"GetAllZDOsWithPrefabIterative failed (signature mismatch?): {ex.Message}");
             }
             return result;
         }

@@ -66,13 +66,12 @@ const string CartographyPrefab = "piece_cartographytable";
 int prefabHash = CartographyPrefab.GetStableHashCode();
 
 var zdos = new List<ZDO>();
-// Signature varies by Valheim version — verify in assembly_valheim:
-//   ZDOMan.instance.GetAllZDOsWithPrefab(string prefab, List<ZDO> zdos)  // returns bool
-ZDOMan.instance.GetAllZDOsWithPrefab(CartographyPrefab, zdos);
+// Current Valheim only exposes the ITERATIVE form (the simple one was removed):
+//   bool GetAllZDOsWithPrefabIterative(string prefab, List<ZDO> zdos, ref int index)
+// It appends to `zdos`, does ~400 sectors per call, and returns true when complete:
+int index = 0;
+while (!ZDOMan.instance.GetAllZDOsWithPrefabIterative(CartographyPrefab, zdos, ref index)) { }
 ```
-
-If `GetAllZDOsWithPrefab` isn't available/stable in the target version, fall back to
-iterating `ZDOMan`'s object index and filtering by `zdo.GetPrefab() == prefabHash`.
 
 ### 3.2 Read the map-data byte array from the ZDO — ✅ CONFIRMED
 
