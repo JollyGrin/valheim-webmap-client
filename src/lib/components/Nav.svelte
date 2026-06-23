@@ -149,7 +149,7 @@
 
 <nav class="hidden h-[50px] items-center justify-between bg-slate-900 p-2 text-white sm:flex">
 	<div class="flex gap-2">
-		<span>Valheim Server: Forest of Grins</span>
+		<span>Valheim Server: Turtleheim</span>
 		<span class="rounded-full bg-slate-950 px-2 py-1 font-mono text-xs"
 			>valheim.dean.lol:27029
 		</span>
@@ -169,6 +169,10 @@
 	{:else if isOpen}
 		<!-- Login/Registration form -->
 		<div class="flex flex-col gap-1">
+			<p class="text-xs text-slate-300">
+				Pick any username and enter the <strong>Valheim server password</strong> to add pins &
+				photos. Viewing the map is open to everyone — no sign-in needed.
+			</p>
 			<div class="flex gap-2">
 				<input
 					type="text"
