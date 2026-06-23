@@ -14,12 +14,12 @@ on:
       - "mods/WebMapCartographySync/**"
   workflow_dispatch:
 
+env:
+  VALHEIM_DIR: ${{ github.workspace }}/.valheim-server
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mods/WebMapCartographySync
     steps:
       - uses: actions/checkout@v4
 
@@ -32,22 +32,37 @@ jobs:
         id: cache-valheim
         uses: actions/cache@v4
         with:
-          path: ~/valheim-server/valheim_server_Data/Managed
-          key: valheim-managed-896660-v1
+          path: ${{ env.VALHEIM_DIR }}/valheim_server_Data/Managed
+          key: valheim-managed-896660-v2
 
       - name: Setup steamcmd
         if: steps.cache-valheim.outputs.cache-hit != 'true'
         uses: CyberAndrii/setup-steamcmd@v1
 
-      - name: Download Valheim dedicated server (app 896660, anonymous)
+      - name: Download Valheim dedicated server (app 896660, anonymous, with retry)
         if: steps.cache-valheim.outputs.cache-hit != 'true'
-        run: steamcmd +force_install_dir "$HOME/valheim-server" +login anonymous +app_update 896660 validate +quit
+        run: |
+          set -uo pipefail
+          # steamcmd self-bootstrap (first invocation often updates itself)
+          steamcmd +quit || true
+          for attempt in 1 2 3 4; do
+            echo "::group::steamcmd attempt $attempt"
+            steamcmd +force_install_dir "$VALHEIM_DIR" +login anonymous +app_update 896660 validate +quit
+            code=$?
+            echo "::endgroup::"
+            if [ -f "$VALHEIM_DIR/valheim_server_Data/Managed/assembly_valheim.dll" ]; then
+              echo "Valheim assemblies present."; break
+            fi
+            echo "attempt $attempt failed (exit $code); retrying in 15s..."; sleep 15
+          done
+          test -f "$VALHEIM_DIR/valheim_server_Data/Managed/assembly_valheim.dll"
 
       - name: Assemble libs/
+        working-directory: mods/WebMapCartographySync
         run: |
           set -euo pipefail
           mkdir -p libs
-          M="$HOME/valheim-server/valheim_server_Data/Managed"
+          M="$VALHEIM_DIR/valheim_server_Data/Managed"
           cp "$M/assembly_valheim.dll" "$M/assembly_utils.dll" \
              "$M/UnityEngine.dll" "$M/UnityEngine.CoreModule.dll" libs/
 
@@ -66,6 +81,7 @@ jobs:
           echo "libs/ contents:"; ls -la libs
 
       - name: Build (Release)
+        working-directory: mods/WebMapCartographySync
         run: dotnet build WebMapCartographySync.csproj -c Release -p:LibsDir="$PWD/libs"
 
       - name: Upload plugin artifact
