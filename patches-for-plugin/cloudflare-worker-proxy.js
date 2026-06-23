@@ -7,8 +7,9 @@ export default {
     const url = new URL(request.url);
     const { pathname, searchParams, origin: workerOrigin } = url;
 
-    // Base origin for your server
-    const BASE_ORIGIN = 'http://forestofgrins.noob.club:20659';
+    // Base origin for your server (HostHavoc). Hostname required (Workers can't fetch raw IPs);
+    // valheim.dean.lol is a DNS-only A record -> 198.73.57.160. Port must be open inbound on the host.
+    const BASE_ORIGIN = 'http://valheim.dean.lol:27031';
 
     // Handle WebSocket upgrade
     if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {

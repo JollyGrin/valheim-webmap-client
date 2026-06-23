@@ -151,7 +151,7 @@
 	<div class="flex gap-2">
 		<span>Valheim Server: Forest of Grins</span>
 		<span class="rounded-full bg-slate-950 px-2 py-1 font-mono text-xs"
-			>forestofgrins.noob.club:20656
+			>valheim.dean.lol:27029
 		</span>
 	</div>
 
