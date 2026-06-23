@@ -1,0 +1,9 @@
+{
+  "name": "WebMapCartographySync",
+  "version_number": "0.1.0",
+  "website_url": "https://github.com/JollyGrin/map-iframe",
+  "description": "Server-side: mirrors cartography-table pins onto the WebMap web map. No client mods needed.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2202"
+  ]
+}

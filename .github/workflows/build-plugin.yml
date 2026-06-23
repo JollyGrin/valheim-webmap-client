@@ -1,0 +1,76 @@
+name: Build WebMapCartographySync
+
+# Compiles the server-side cartography→WebMap pin plugin entirely in CI.
+# Reference assemblies are fetched here (steamcmd for Valheim, Thunderstore for BepInEx,
+# GitHub for WebMap) so no copyrighted DLLs live in the repo. Artifact: WebMapCartographySync.dll
+
+on:
+  push:
+    paths:
+      - "mods/WebMapCartographySync/**"
+      - ".github/workflows/build-plugin.yml"
+  pull_request:
+    paths:
+      - "mods/WebMapCartographySync/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mods/WebMapCartographySync
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache Valheim dedicated server (Managed assemblies)
+        id: cache-valheim
+        uses: actions/cache@v4
+        with:
+          path: ~/valheim-server/valheim_server_Data/Managed
+          key: valheim-managed-896660-v1
+
+      - name: Setup steamcmd
+        if: steps.cache-valheim.outputs.cache-hit != 'true'
+        uses: CyberAndrii/setup-steamcmd@v1
+
+      - name: Download Valheim dedicated server (app 896660, anonymous)
+        if: steps.cache-valheim.outputs.cache-hit != 'true'
+        run: steamcmd +force_install_dir "$HOME/valheim-server" +login anonymous +app_update 896660 validate +quit
+
+      - name: Assemble libs/
+        run: |
+          set -euo pipefail
+          mkdir -p libs
+          M="$HOME/valheim-server/valheim_server_Data/Managed"
+          cp "$M/assembly_valheim.dll" "$M/assembly_utils.dll" \
+             "$M/UnityEngine.dll" "$M/UnityEngine.CoreModule.dll" libs/
+
+          # BepInEx core (latest BepInExPack_Valheim from Thunderstore)
+          BEP_URL=$(curl -sSL https://thunderstore.io/api/experimental/package/denikson/BepInExPack_Valheim/ | jq -r '.latest.download_url')
+          curl -sSL "$BEP_URL" -o bep.zip
+          unzip -o -q bep.zip -d bep
+          cp bep/BepInExPack_Valheim/BepInEx/core/BepInEx.dll \
+             bep/BepInExPack_Valheim/BepInEx/core/0Harmony.dll libs/
+
+          # WebMap (matches the version deployed on the server)
+          curl -sSL https://github.com/h0tw1r3/valheim-webmap/releases/download/v2.7.1/WebMap-v2.7.1.zip -o webmap.zip
+          unzip -o -q webmap.zip -d webmap
+          cp webmap/WebMap-v2.7.1/WebMap.dll libs/
+
+          echo "libs/ contents:"; ls -la libs
+
+      - name: Build (Release)
+        run: dotnet build WebMapCartographySync.csproj -c Release -p:LibsDir="$PWD/libs"
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebMapCartographySync
+          path: mods/WebMapCartographySync/bin/Release/WebMapCartographySync.dll
+          if-no-files-found: error
