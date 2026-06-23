@@ -2,6 +2,10 @@
 	import { onMount } from 'svelte';
 	import { useRegister, type RegisterRequest, type UserDTO } from '$lib/api/user';
 	import { writable } from 'svelte/store';
+	import ModalMods from '$lib/modal/ModalMods.svelte';
+
+	// "How to join" mods panel
+	let isModsOpen = $state(false);
 
 	// Store for current user
 	const currentUser = writable<UserDTO | null>(null);
@@ -153,6 +157,10 @@
 		<span class="rounded-full bg-slate-950 px-2 py-1 font-mono text-xs"
 			>valheim.dean.lol:27029
 		</span>
+		<button
+			class="rounded-full bg-sky-600 px-3 py-1 text-xs hover:bg-sky-500"
+			onclick={() => (isModsOpen = true)}>How to join</button
+		>
 	</div>
 
 	{#if $currentUser}
@@ -214,6 +222,10 @@
 		</button>
 	{/if}
 </nav>
+
+{#if isModsOpen}
+	<ModalMods onClose={() => (isModsOpen = false)} />
+{/if}
 
 <style>
 	input {
