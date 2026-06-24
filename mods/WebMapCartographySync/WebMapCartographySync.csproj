@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Server-side BepInEx plugin: mirrors cartography-table pins into WebMap.
+    See ../../docs/cartography-pin-sync-spec.md for the design + verified format.
+
+    Build prerequisites (set these as env vars or pass via -p:):
+      VALHEIM_MANAGED = path to .../valheim_server_Data/Managed   (game assemblies)
+      BEPINEX_CORE    = path to .../BepInEx/core                  (BepInEx + 0Harmony)
+      WEBMAP_DLL      = full path to the deployed WebMap.dll       (for AddPin/SavePins types)
+
+    We reference WebMap.dll only so the project resolves; at runtime we reach WebMap
+    through reflection (WebMapBridge.cs) so a version mismatch degrades gracefully
+    instead of failing to load.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>WebMapCartographySync</AssemblyName>
+    <Version>0.1.0</Version>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+
+    <!-- Default all reference paths to the local libs/ folder (populated by FTP pull or CI).
+         Override any of them on the command line: -p:VALHEIM_MANAGED=... etc. -->
+    <LibsDir>$(MSBuildProjectDirectory)/libs</LibsDir>
+    <VALHEIM_MANAGED Condition="'$(VALHEIM_MANAGED)' == ''">$(LibsDir)</VALHEIM_MANAGED>
+    <BEPINEX_CORE Condition="'$(BEPINEX_CORE)' == ''">$(LibsDir)</BEPINEX_CORE>
+    <WEBMAP_DLL Condition="'$(WEBMAP_DLL)' == ''">$(LibsDir)/WebMap.dll</WEBMAP_DLL>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- BepInEx + Harmony (from your BepInEx/core folder) -->
+    <Reference Include="BepInEx">
+      <HintPath>$(BEPINEX_CORE)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BEPINEX_CORE)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Valheim + Unity (from valheim_server_Data/Managed) -->
+    <Reference Include="assembly_valheim">
+      <HintPath>$(VALHEIM_MANAGED)\assembly_valheim.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="assembly_utils">
+      <HintPath>$(VALHEIM_MANAGED)\assembly_utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(VALHEIM_MANAGED)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(VALHEIM_MANAGED)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- WebMap (deployed plugin DLL) — referenced for convenience; runtime uses reflection -->
+    <Reference Include="WebMap" Condition="'$(WEBMAP_DLL)' != ''">
+      <HintPath>$(WEBMAP_DLL)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,90 @@
+name: Build WebMapCartographySync
+
+# Compiles the server-side cartography→WebMap pin plugin entirely in CI.
+# Reference assemblies are fetched here (steamcmd for Valheim, Thunderstore for BepInEx,
+# GitHub for WebMap) so no copyrighted DLLs live in the repo. Artifact: WebMapCartographySync.dll
+
+on:
+  push:
+    paths:
+      - "mods/WebMapCartographySync/**"
+      - ".github/workflows/build-plugin.yml"
+  pull_request:
+    paths:
+      - "mods/WebMapCartographySync/**"
+  workflow_dispatch:
+
+env:
+  VALHEIM_DIR: ${{ github.workspace }}/.valheim-server
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache Valheim dedicated server (Managed assemblies)
+        id: cache-valheim
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VALHEIM_DIR }}/valheim_server_Data/Managed
+          key: valheim-managed-896660-v2
+
+      - name: Setup steamcmd
+        if: steps.cache-valheim.outputs.cache-hit != 'true'
+        uses: CyberAndrii/setup-steamcmd@v1
+
+      - name: Download Valheim dedicated server (app 896660, anonymous, with retry)
+        if: steps.cache-valheim.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set +e   # do NOT abort on a single steamcmd failure; we retry below
+          DLL="$VALHEIM_DIR/valheim_server_Data/Managed/assembly_valheim.dll"
+          steamcmd +quit   # self-bootstrap (first run updates itself)
+          for attempt in 1 2 3 4; do
+            echo "::group::steamcmd attempt $attempt"
+            steamcmd +force_install_dir "$VALHEIM_DIR" +login anonymous +app_update 896660 validate +quit
+            echo "::endgroup::"
+            if [ -f "$DLL" ]; then echo "Valheim assemblies present."; break; fi
+            echo "attempt $attempt failed; retrying in 15s..."; sleep 15
+          done
+          if [ ! -f "$DLL" ]; then echo "ERROR: Valheim assemblies never downloaded"; exit 1; fi
+
+      - name: Assemble libs/
+        working-directory: mods/WebMapCartographySync
+        run: |
+          set -euo pipefail
+          mkdir -p libs
+          M="$VALHEIM_DIR/valheim_server_Data/Managed"
+          cp "$M/assembly_valheim.dll" "$M/assembly_utils.dll" \
+             "$M/UnityEngine.dll" "$M/UnityEngine.CoreModule.dll" libs/
+
+          # BepInEx core (latest BepInExPack_Valheim from Thunderstore)
+          BEP_URL=$(curl -sSL https://thunderstore.io/api/experimental/package/denikson/BepInExPack_Valheim/ | jq -r '.latest.download_url')
+          curl -sSL "$BEP_URL" -o bep.zip
+          unzip -o -q bep.zip -d bep
+          cp bep/BepInExPack_Valheim/BepInEx/core/BepInEx.dll \
+             bep/BepInExPack_Valheim/BepInEx/core/0Harmony.dll libs/
+
+          # WebMap (matches the version deployed on the server)
+          curl -sSL https://github.com/h0tw1r3/valheim-webmap/releases/download/v2.7.1/WebMap-v2.7.1.zip -o webmap.zip
+          unzip -o -q webmap.zip -d webmap
+          cp webmap/WebMap-v2.7.1/WebMap.dll libs/
+
+          echo "libs/ contents:"; ls -la libs
+
+      - name: Build (Release)
+        working-directory: mods/WebMapCartographySync
+        run: dotnet build WebMapCartographySync.csproj -c Release -p:LibsDir="$PWD/libs"
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebMapCartographySync
+          path: mods/WebMapCartographySync/bin/Release/WebMapCartographySync.dll
+          if-no-files-found: error

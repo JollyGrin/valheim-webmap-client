@@ -1,0 +1,7 @@
+# Build output
+bin/
+obj/
+
+# Reference assemblies — pulled via FTP locally or via steamcmd/Thunderstore in CI.
+# Do NOT commit: Valheim/Unity DLLs are copyrighted; WebMap/BepInEx are redistributed elsewhere.
+libs/
