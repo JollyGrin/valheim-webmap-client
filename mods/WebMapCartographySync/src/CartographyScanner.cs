@@ -93,7 +93,11 @@ namespace WebMapCartographySync
                 }
             }
 
-            Plugin.Log.LogInfo($"Scan: {zdos.Count} table(s), {parsedTotal} pin(s) parsed, {added} new mirrored.");
+            if (added > 0)
+                Plugin.Log.LogInfo($"Mirrored {added} new cartography pin(s) to WebMap " +
+                                   $"({zdos.Count} table(s), {parsedTotal} parsed).");
+            else if (_config.VerboseLogging.Value)
+                Plugin.Log.LogInfo($"Scan: {zdos.Count} table(s), {parsedTotal} pin(s) parsed, 0 new.");
 
             if (added > 0) WebMapBridge.SavePins();
         }
@@ -137,8 +141,9 @@ namespace WebMapCartographySync
                 long total = data.Length;
                 long afterExplored = 8L + (long)exploredLength;
 
-                Plugin.Log.LogInfo($"cart parse: total={total}B version={version} exploredLength={exploredLength} " +
-                                   $"(explored should end at {afterExplored})");
+                if (_config.VerboseLogging.Value)
+                    Plugin.Log.LogInfo($"cart parse: total={total}B version={version} exploredLength={exploredLength} " +
+                                       $"(explored should end at {afterExplored})");
 
                 // If the explored block doesn't fit, our format assumption is wrong for this game
                 // version. Dump head+tail so we can decode the real layout.
@@ -166,7 +171,7 @@ namespace WebMapCartographySync
                     Plugin.Log.LogWarning($"Implausible numPins={numPins}; tail96={HexTail(data, 96)}");
                     return pins;
                 }
-                Plugin.Log.LogInfo($"cart parse: numPins={numPins}");
+                if (_config.VerboseLogging.Value) Plugin.Log.LogInfo($"cart parse: numPins={numPins}");
 
                 for (int i = 0; i < numPins; i++)
                 {
@@ -178,7 +183,8 @@ namespace WebMapCartographySync
                     // v3 (current Valheim) adds a per-pin author = PlatformUserID.ToString()
                     if (version >= 3) pkg.ReadString();
                     pins.Add(new ParsedPin(ownerId, name, vpos, type, isChecked));
-                    Plugin.Log.LogInfo($"  pin[{i}] type={type} pos=({vpos.x:F0},{vpos.z:F0}) text='{name}' owner={ownerId}");
+                    if (_config.VerboseLogging.Value)
+                        Plugin.Log.LogInfo($"  pin[{i}] type={type} pos=({vpos.x:F0},{vpos.z:F0}) text='{name}' owner={ownerId}");
                 }
             }
             catch (Exception ex)

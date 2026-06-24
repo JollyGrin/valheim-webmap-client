@@ -10,6 +10,7 @@ namespace WebMapCartographySync
     public class PluginConfig
     {
         public readonly ConfigEntry<bool> Enabled;
+        public readonly ConfigEntry<bool> VerboseLogging;
         public readonly ConfigEntry<float> PollIntervalSeconds;
         public readonly ConfigEntry<float> DedupeRadius;
         public readonly ConfigEntry<bool> IncludeOwnerInKey;
@@ -28,6 +29,8 @@ namespace WebMapCartographySync
         {
             Enabled = cfg.Bind("General", "enabled", true,
                 "Master switch for the cartography -> WebMap pin sync.");
+            VerboseLogging = cfg.Bind("General", "verbose_logging", false,
+                "Log per-scan parse details and every pin found (noisy). Warnings/errors always log.");
             PollIntervalSeconds = cfg.Bind("General", "poll_interval_seconds", 30f,
                 "How often (seconds) to scan cartography tables. Min 5.");
             CartographyPrefab = cfg.Bind("General", "cartography_prefab", "piece_cartographytable",
