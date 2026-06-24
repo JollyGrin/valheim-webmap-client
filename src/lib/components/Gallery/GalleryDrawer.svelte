@@ -1,8 +1,12 @@
 <script lang="ts">
+	import type { Coordinate } from '$lib/types';
 	import type { MediaGetDTO } from '$lib/api/media';
 	import { useAllPhotos } from '$lib/api/media';
 	import IconMedia from '$lib/icon/IconMedia.svelte';
 	import PinThumbnail from './PinThumbnail.svelte';
+	import { iframePanTo, iframeShowPing } from '$lib/iframe-utility';
+
+	let { iframe }: { iframe: HTMLIFrameElement } = $props();
 
 	// State to track if drawer is expanded
 	let expanded = $state(false);
@@ -18,6 +22,16 @@
 		const aDate = new Date(a.createdAt).getTime();
 		const bDate = new Date(b.createdAt).getTime();
 		return bDate - aDate;
+	}
+
+	function panToImage(props: Coordinate) {
+		const coords = { x: props.x, z: props.z };
+		console.info('Panning to:', coords);
+		iframePanTo(iframe, coords);
+		iframeShowPing(iframe, coords, {
+			text: 'Ping',
+			duration: 5000
+		});
 	}
 </script>
 
@@ -39,7 +53,10 @@
 	{/if}
 	{#if expanded}
 		{#each $query.data?.sort(sortLatestDateFirst) ?? [] as photo, i (i)}
-			<PinThumbnail data={photo} />
+			<PinThumbnail
+				data={photo}
+				panTo={() => panToImage({ x: photo.x.toString(), z: photo.z.toString() })}
+			/>
 		{/each}
 	{/if}
 

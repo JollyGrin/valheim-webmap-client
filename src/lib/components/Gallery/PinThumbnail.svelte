@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MediaGetDTO } from '$lib/api/media';
 
-	let { data }: { data: MediaGetDTO } = $props();
+	let { data, panTo }: { data: MediaGetDTO; panTo(): void } = $props();
 
 	function getFormattedDate(date = new Date()) {
 		const day = date.getDate();
@@ -21,7 +21,7 @@
 	const formattedDate = $derived(getFormattedDate(new Date(data?.createdAt ?? '')));
 </script>
 
-<div class="group relative px-2">
+<button class="group relative px-2" onclick={panTo}>
 	<div
 		class="absolute top-1 left-3 rounded-xl px-2 py-1 font-mono text-xs text-white backdrop-blur-sm group-hover:hidden"
 	>
@@ -37,4 +37,4 @@
 		alt="screenshot"
 		class="rounded-2xl transition-all group-hover:saturate-200 hover:scale-105"
 	/>
-</div>
+</button>

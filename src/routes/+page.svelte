@@ -3,7 +3,6 @@
 	import { onMount } from 'svelte';
 	import type { Coordinate, PinType } from '$lib/types';
 	import ModalAddPin from '$lib/modal/ModalAddPin.svelte';
-	import PinThumbnail from '$lib/components/Gallery/PinThumbnail.svelte';
 	import GalleryDrawer from '$lib/components/Gallery/GalleryDrawer.svelte';
 	import ModalAddPhoto from '$lib/modal/ModalAddPhoto.svelte';
 	import { iframeDrawPin } from '$lib/iframe-utility';
@@ -120,7 +119,9 @@
 	<Nav />
 
 	<div id="map-container" class=" bg-gray-500">
-		<GalleryDrawer />
+		{#if iframe}
+			<GalleryDrawer {iframe} />
+		{/if}
 		<div class="absolute bottom-4 z-10 flex w-full justify-center gap-2 text-xs">
 			{#each nearbyPins as pin (pin)}
 				<button class="bg-red-300" onclick={() => removePin(pin.id)}
@@ -146,7 +147,7 @@
 		<iframe
 			id="map-iframe"
 			title="Valheim WebMap"
-			src="https://empty-dream-fe29.innkeeper1.workers.dev/"
+			src="https://empty-dream-fe29.innkeeper1.workers.dev/?timestamp=1"
 			sandbox="allow-same-origin allow-scripts allow-forms"
 			onload={handleIframeLoad}
 		></iframe>
