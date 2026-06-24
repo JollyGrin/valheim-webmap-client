@@ -54,11 +54,13 @@ namespace WebMapCartographySync
             MirrorBossPins = cfg.Bind("Filter", "mirror_boss_pins", false,
                 "Also mirror Boss pins (Icon types are always mirrored).");
 
-            MapIcon0 = cfg.Bind("Mapping", "icon0", "dot", "WebMap type for Minimap.PinType.Icon0");
-            MapIcon1 = cfg.Bind("Mapping", "icon1", "fire", "WebMap type for Minimap.PinType.Icon1");
-            MapIcon2 = cfg.Bind("Mapping", "icon2", "mine", "WebMap type for Minimap.PinType.Icon2");
-            MapIcon3 = cfg.Bind("Mapping", "icon3", "house", "WebMap type for Minimap.PinType.Icon3");
-            MapIcon4 = cfg.Bind("Mapping", "icon4", "cave", "WebMap type for Minimap.PinType.Icon4");
+            // Verified empirically in-game vs web (Icon enum is non-contiguous; Icon4 == int 6).
+            // Icon0=flame, Icon1=house, Icon2=anvil, Icon3=dot, Icon4=portal in vanilla Valheim.
+            MapIcon0 = cfg.Bind("Mapping", "icon0", "fire", "WebMap type for Minimap.PinType.Icon0 (in-game flame)");
+            MapIcon1 = cfg.Bind("Mapping", "icon1", "house", "WebMap type for Minimap.PinType.Icon1 (in-game house)");
+            MapIcon2 = cfg.Bind("Mapping", "icon2", "mine", "WebMap type for Minimap.PinType.Icon2 (in-game anvil)");
+            MapIcon3 = cfg.Bind("Mapping", "icon3", "dot", "WebMap type for Minimap.PinType.Icon3 (in-game dot)");
+            MapIcon4 = cfg.Bind("Mapping", "icon4", "cave", "WebMap type for Minimap.PinType.Icon4 (in-game portal)");
             MapDefault = cfg.Bind("Mapping", "default", "dot",
                 "WebMap type for any other mirrored pin type.");
         }
