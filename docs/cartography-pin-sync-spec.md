@@ -91,7 +91,7 @@ The decompressed payload is a `ZPackage` with this **exact** layout (verified ag
 `Minimap.GetSharedMapData` + `ReadExploredArray`, current map-data **version `2`**):
 
 ```
-int    version              // currently 2
+int    version              // live game = 3 (was 2; v3 added per-pin author)
 int    exploredLength        // == textureSize * textureSize
 bool[] explored              // `exploredLength` bools, 1 byte each  (we skip these)
 int    numPins               // only pins with m_save==true AND type != Death are written
@@ -101,7 +101,10 @@ repeat numPins:
     Vector3 pos              // 3 floats x,y,z  (use x,z; y is unused on the web map)
     int     type             // Minimap.PinType
     bool    checked
+    string  author           // v3 ONLY: PlatformUserID.ToString() (e.g. "Steam_7656...") — read & discard
 ```
+> Confirmed against live server data: `version=3`, `exploredLength=4194304` (2048²). v2 had no
+> author field; reading it only when `version >= 3` keeps both formats working.
 
 Reference parser (no `Minimap` needed — pure ZPackage + the `Minimap.PinType` enum, all
 available on a dedicated server):

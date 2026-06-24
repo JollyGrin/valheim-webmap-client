@@ -175,6 +175,8 @@ namespace WebMapCartographySync
                     Vector3 vpos = pkg.ReadVector3();
                     var type = (Minimap.PinType)pkg.ReadInt();
                     bool isChecked = pkg.ReadBool();
+                    // v3 (current Valheim) adds a per-pin author = PlatformUserID.ToString()
+                    if (version >= 3) pkg.ReadString();
                     pins.Add(new ParsedPin(ownerId, name, vpos, type, isChecked));
                     Plugin.Log.LogInfo($"  pin[{i}] type={type} pos=({vpos.x:F0},{vpos.z:F0}) text='{name}' owner={ownerId}");
                 }
