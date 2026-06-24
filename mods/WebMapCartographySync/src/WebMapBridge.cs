@@ -21,6 +21,7 @@ namespace WebMapCartographySync
     {
         private static object _mapDataServer;
         private static MethodInfo _addPin;
+        private static MethodInfo _removePin;
         private static MethodInfo _savePins;
         private static FieldInfo _pinsField;
 
@@ -62,6 +63,9 @@ namespace WebMapCartographySync
                 _pinsField = mdsType.GetField("pins",
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
+                // 3b) RemovePin(int idx) — for owner reconciliation (optional feature)
+                _removePin = mdsType.GetMethod("RemovePin", new[] { typeof(int) });
+
                 // 4) static SavePins() somewhere in the WebMap assembly
                 foreach (var t in types)
                 {
@@ -100,8 +104,28 @@ namespace WebMapCartographySync
             catch (Exception ex) { Plugin.Log.LogWarning($"SavePins invoke failed: {ex.Message}"); }
         }
 
-        /// <summary>Extract the pinId column (index 1) from WebMap's current pins to prime dedupe.</summary>
-        public static IEnumerable<string> GetExistingPinIds()
+        public static bool CanRemove => _removePin != null && _pinsField != null;
+
+        /// <summary>Remove the WebMap pin whose pinId (CSV column 1) matches. Only ever called with
+        /// our own cart-prefixed ids, so it never touches chat/web-created pins.</summary>
+        public static bool RemovePin(string pinId)
+        {
+            if (!CanRemove || !(_pinsField.GetValue(_mapDataServer) is List<string> lines)) return false;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var parts = lines[i].Split(',');
+                if (parts.Length > 1 && parts[1] == pinId)
+                {
+                    _removePin.Invoke(_mapDataServer, new object[] { i });
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Yield (id, pinId) = (CSV col 0, col 1) for every current WebMap pin, to rebuild
+        /// our owner→pinId state on startup.</summary>
+        public static IEnumerable<(string id, string pinId)> GetExistingPins()
         {
             if (_pinsField?.GetValue(_mapDataServer) is List<string> lines)
             {
@@ -109,7 +133,7 @@ namespace WebMapCartographySync
                 {
                     if (string.IsNullOrEmpty(line)) continue;
                     var parts = line.Split(',');
-                    if (parts.Length > 1) yield return parts[1];
+                    if (parts.Length > 1) yield return (parts[0], parts[1]);
                 }
             }
         }

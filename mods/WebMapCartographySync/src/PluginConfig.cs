@@ -14,6 +14,7 @@ namespace WebMapCartographySync
         public readonly ConfigEntry<float> PollIntervalSeconds;
         public readonly ConfigEntry<float> DedupeRadius;
         public readonly ConfigEntry<bool> IncludeOwnerInKey;
+        public readonly ConfigEntry<bool> EnableOwnerReconciliation;
         public readonly ConfigEntry<bool> MirrorBossPins;
         public readonly ConfigEntry<string> CartographyPrefab;
 
@@ -42,6 +43,13 @@ namespace WebMapCartographySync
             IncludeOwnerInKey = cfg.Bind("Dedupe", "include_owner_in_key", false,
                 "If true, the same spot pinned by two different players yields two web pins. " +
                 "If false (default), one pin per location regardless of who placed it.");
+
+            EnableOwnerReconciliation = cfg.Bind("Deletion", "enable_owner_reconciliation", false,
+                "When true, a pin a player removed from their map and then re-recorded at a " +
+                "cartography table is also removed from the web map (per-owner: only that player's " +
+                "pins are reconciled; others' pins are never touched). Default false = additive only. " +
+                "Note: deleting ALL your pins then recording can't be detected (your owner id is " +
+                "absent from the write) — use WebMap's !deletePin / !undoPin for a full clear.");
 
             MirrorBossPins = cfg.Bind("Filter", "mirror_boss_pins", false,
                 "Also mirror Boss pins (Icon types are always mirrored).");

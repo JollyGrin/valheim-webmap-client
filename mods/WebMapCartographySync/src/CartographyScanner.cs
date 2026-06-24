@@ -21,9 +21,9 @@ namespace WebMapCartographySync
     public class CartographyScanner
     {
         private readonly PluginConfig _config;
-        private readonly Dedup _dedup = new Dedup();
+        private readonly MirrorState _state = new MirrorState();
         private readonly Dictionary<Minimap.PinType, string> _typeMap;
-        private bool _seenSetPrimed;
+        private bool _primed;
 
         // Cached reflection handle for ZPackage's internal BinaryReader (for O(1) skip).
         private static readonly FieldInfo ZPackageReaderField =
@@ -46,17 +46,20 @@ namespace WebMapCartographySync
                 }
             }
 
-            // Prime the dedupe set once from WebMap's existing pins (survives restarts via pins.csv).
-            if (!_seenSetPrimed)
+            // Rebuild owner->pinId state once from WebMap's existing pins (survives restarts via pins.csv).
+            if (!_primed)
             {
-                _dedup.PrimeFromExisting(WebMapBridge.GetExistingPinIds());
-                _seenSetPrimed = true;
+                _state.Prime(WebMapBridge.GetExistingPins());
+                _primed = true;
             }
 
             var zdos = FindCartographyZdos();
             if (zdos.Count == 0) return;
 
-            int added = 0;
+            // Collect this scan's mirror-eligible pins, grouped by owner: owner -> (pinId -> pin).
+            // Within-scan duplicates collapse by pinId. Each owner's map is the authoritative
+            // "current set" for that owner as of their latest table write.
+            var current = new Dictionary<long, Dictionary<string, ParsedPin>>();
             int parsedTotal = 0;
             foreach (var zdo in zdos)
             {
@@ -67,24 +70,10 @@ namespace WebMapCartographySync
                     foreach (var pin in pins)
                     {
                         if (!_config.ShouldMirror(pin.Type)) continue;
-
-                        string key = _dedup.KeyFor(pin, _config.IncludeOwnerInKey.Value, _config.DedupeRadius.Value);
-                        if (_dedup.SeenOrTooClose(pin, key, _config.DedupeRadius.Value)) continue;
-
-                        string pinId = StableId.From(key);
-                        string webType = _typeMap.TryGetValue(pin.Type, out var t) ? t : _config.MapDefault.Value;
-                        string ownerStr = pin.OwnerId.ToString();
-
-                        WebMapBridge.AddPin(
-                            id: ownerStr,
-                            pinId: pinId,
-                            type: webType,
-                            name: ownerStr,          // no player display-name in the data; see README
-                            position: pin.Pos,
-                            pinText: pin.Label);
-
-                        _dedup.Remember(pin, pinId);
-                        added++;
+                        string pinId = StableId.From(MirrorState.KeyFor(pin, _config.IncludeOwnerInKey.Value, _config.DedupeRadius.Value));
+                        if (!current.TryGetValue(pin.OwnerId, out var byId))
+                            current[pin.OwnerId] = byId = new Dictionary<string, ParsedPin>();
+                        byId[pinId] = pin;
                     }
                 }
                 catch (Exception ex)
@@ -93,11 +82,51 @@ namespace WebMapCartographySync
                 }
             }
 
-            if (added > 0)
-                Plugin.Log.LogInfo($"Mirrored {added} new cartography pin(s) to WebMap " +
-                                   $"({zdos.Count} table(s), {parsedTotal} parsed).");
+            bool reconcile = _config.EnableOwnerReconciliation.Value && WebMapBridge.CanRemove;
+            int added = 0, removed = 0;
+
+            // Only owners PRESENT in this scan are touched; everyone else's mirrored pins persist
+            // (the table only holds the last writer's pins, so absence != deletion for other owners).
+            foreach (var kv in current)
+            {
+                long owner = kv.Key;
+                var currentPins = kv.Value;
+                var mirrored = _state.Owned(owner); // live, mutable
+
+                // Additions
+                foreach (var pin in currentPins)
+                {
+                    if (mirrored.Contains(pin.Key)) continue;
+                    string webType = _typeMap.TryGetValue(pin.Value.Type, out var t) ? t : _config.MapDefault.Value;
+                    string ownerStr = owner.ToString();
+                    WebMapBridge.AddPin(ownerStr, pin.Key, webType, ownerStr, pin.Value.Pos, pin.Value.Label);
+                    mirrored.Add(pin.Key);
+                    added++;
+                }
+
+                // Removals (opt-in): this owner's previously-mirrored pins no longer in their write.
+                if (reconcile)
+                {
+                    var stale = new List<string>();
+                    foreach (var pid in mirrored) if (!currentPins.ContainsKey(pid)) stale.Add(pid);
+                    foreach (var pid in stale)
+                    {
+                        if (WebMapBridge.RemovePin(pid)) removed++;
+                        mirrored.Remove(pid);
+                    }
+                }
+            }
+
+            if (added > 0 || removed > 0)
+            {
+                WebMapBridge.SavePins();
+                Plugin.Log.LogInfo($"Cartography sync: +{added} / -{removed} pin(s) " +
+                                   $"({zdos.Count} table(s), {parsedTotal} parsed, {current.Count} owner(s)).");
+            }
             else if (_config.VerboseLogging.Value)
-                Plugin.Log.LogInfo($"Scan: {zdos.Count} table(s), {parsedTotal} pin(s) parsed, 0 new.");
+            {
+                Plugin.Log.LogInfo($"Scan: {zdos.Count} table(s), {parsedTotal} parsed, no changes.");
+            }
 
             if (added > 0) WebMapBridge.SavePins();
         }

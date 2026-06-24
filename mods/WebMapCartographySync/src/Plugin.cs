@@ -17,7 +17,7 @@ namespace WebMapCartographySync
     {
         public const string PluginGuid = "lol.dean.turtleheim.webmapcartographysync";
         public const string PluginName = "WebMapCartographySync";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.2.0";
 
         internal static ManualLogSource Log;
         private PluginConfig _config;

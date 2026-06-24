@@ -88,9 +88,25 @@ These are verified against decompiled source but worth a glance after major Valh
 - **WebMap reflection targets**: static `mapDataServer` field, `AddPin(6 args)`, static
   `SavePins()`, `pins` list. The bind step logs exactly what it found/missed.
 
-## Known limitations (v1)
+## Pin deletion (v0.2, opt-in)
 
-- **Additive only** — removing/unchecking a pin in-game does not remove it from the web map.
+Set `[Deletion] enable_owner_reconciliation = true` to also **remove** pins from the web map
+when a player deletes them in-game and re-records at a cartography table. It's **per-owner**:
+each pin carries an ownerID, so a player's write is treated as the authoritative current set
+*for their own pins only* — additions and removals apply to that owner, and other players'
+mirrored pins are never touched (the table only ever holds the last writer's pins, so absence
+≠ deletion for anyone else). Our pins are tagged with a `cart…` id, so reconciliation can never
+remove chat (`!pin`) or web-created pins.
+
+Default is **off** (additive only). See [`../../docs/cartography-pin-deletion.md`](../../docs/cartography-pin-deletion.md)
+for the design and the one known limitation below.
+
+## Known limitations
+
+- **Delete-all then record can't be detected** (even with reconciliation on): if a player removes
+  *every* pin and records, their owner id is absent from the write, so we can't tell their pins
+  should be cleared. Use WebMap's `!deletePin <text>` / `!undoPin` for a full clear.
+- **Unchecking** a pin in-game is not reflected on the web map.
 - **No player display-name** — the shared data carries the owner's numeric `playerID` + the pin
   label, not a name. WebMap's `id`/`name` fields get the `ownerID` string. (Future: resolve
   names from connected peers.)
